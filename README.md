@@ -34,33 +34,33 @@ ln -s ~/Verifier_Development/auto_LiRPA auto_LiRPA
 This allows the project to access *auto_LiRPA* directly.
 
 ### 4. Download Nerfstudio data
-Download the Nerfstudio dataset from: *https://drive.google.com/drive/folders/1tUD5NPt9iT4OKgfWAXkyUW0u_2F-1qFb?usp=drive_link*
+Download the Nerfstudio dataset of *airplane_grey* case from: *https://drive.google.com/drive/folders/1hmvUQKnrVkC5pbjkJPBLuzCAUa3K97c-?usp=sharing*
 
-Replace the folder *nerfstudio* under the root folder of *Abstract-Rendering* with the downloaded dataset:
+From the root folder of *Abstract-Rendering*, create a soft link to the nerfstudio folder:
 
 ```bash
-mv /path/to/downloaded/nerfstudio ./nerfstudio
+cd ~/Abstract-Rendering
+ln -s /path/to/downloaded/nerfstudio nerfstudio
 ```
 
 ### 5. Run Example
 Test rendering performance of example *airplane_grey*:
 ```bash
-cd ./examples/airplane_grey
+cd ./scripts
 python3 render_gsplat.py
 ```
 
 Test abstract rendering performance of example *airplane_grey*:
 ```bash
-cd ./examples/airplane_grey
 python3 abstract_gsplat.py
 ```
 
-### 6. View Ourputs
+### 6. View Outputs
 Rendered Images can be viewed in 
 ```bash
-./Outputs/RenderedImages/**example_name**/**perturbation_type**/
+~/Abstract-Rendering/Outputs/RenderedImages/**example_name**/**perturbation_type**/
 ```
 
 Abstract Rendered Images can be viewed in 
 ```bash
-./Outputs/AbstractImages/**example_name**/**perturbation_type**/
+~/Abstract-Rendering/Outputs/AbstractImages/**example_name**/**perturbation_type**/
