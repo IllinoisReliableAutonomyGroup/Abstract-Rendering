@@ -1,6 +1,6 @@
 import os 
-import sys
 import json 
+import sys
 
 import time
 import numpy as np 
@@ -12,7 +12,7 @@ from tqdm import tqdm
 from scipy.spatial.transform import Rotation 
 from PIL import Image 
 
-grandfather_path = os.path.abspath(os.path.join(__file__, "../../.."))
+grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 sys.path.append(grandfather_path)
 
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
@@ -23,7 +23,6 @@ from utils import convert_input_to_rot
 
 from render_functions import GsplatRGBOrigin, TransferModelOrigin
 
-
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -31,13 +30,12 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DTYPE = torch.float32
     
 def main(setup_dict):
-    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max"]
-    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max = (setup_dict[key] for key in key_list)
+    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max","start_arr", "end_arr", "trans_arr"]
+    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max,start_arr, end_arr, trans_arr = (setup_dict[key] for key in key_list)
     
     # Load Already Trained Scene Files
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    script_dir = os.path.join(script_dir, grandfather_path)
-    scene_folder = os.path.join(script_dir, 'nerfstudio/', scene_path)
+    scene_folder = os.path.join(script_dir, '../nerfstudio/', scene_path)
     transform_file = os.path.join(scene_folder, 'dataparser_transforms.json')
     checkpoint_file = os.path.join(scene_folder, 'nerfstudio_models/', checkpoint_filename)
 
@@ -95,18 +93,17 @@ def main(setup_dict):
         bg_color = torch.from_numpy(bg_img/255).to(DEVICE)  # shape: (H, W, 3)
     
     # Generate Rotation Matrix
-    start_arr = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
-    end_arr = np.array([0.0, 0.0, 0.0])
+    
     rot = dir_to_rpy_and_rot(start_arr, end_arr)
     rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
-    trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
-    trans = torch.from_numpy(trans).to(device=DEVICE, dtype=DTYPE)
+    # trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
+    trans = torch.from_numpy(trans_arr).to(device=DEVICE, dtype=DTYPE)
     # print("rot:",rot)
 
     input_ref = (input_min + input_max)/2
     input_min, input_max, input_ref = input_min.unsqueeze(0), input_max.unsqueeze(0), input_ref.unsqueeze(0) #[1, N]
     inputs_ref = generate_single(input_min, input_max, input_ref)#generate_trajectory(input_min, input_max, input_ref, N_samples) # [N_samples+3, N]
-    inputs_ref = inputs_ref.to(DEVICE)
+    inputs_ref = inputs_ref[:].to(DEVICE)
     # partition_num = len(inputs_ref)
     
 
@@ -159,7 +156,6 @@ def main(setup_dict):
             img_ref= (img_ref.clip(min=0.0, max=1.0)*255).astype(np.uint8)
             res_ref = Image.fromarray(img_ref)
             res_ref.save(f'{save_folder_full}/ref_{absimg_num}.png')
-            print(f"Saved Reference Image: {save_folder_full}/ref_{absimg_num}.png")
 
         absimg_num+=1
 
@@ -195,7 +191,7 @@ if __name__=='__main__':
 
     domain_type = "y"
 
-    save_folder = "Outputs/RenderedImages/"+object_name+"/"+domain_type
+    save_folder = "../Outputs/RenderedImages/"+object_name+"/"+domain_type
     save_ref = True
     save_bound = True
 
@@ -235,6 +231,9 @@ if __name__=='__main__':
         "N_samples": N_samples,
         "input_min": input_min,
         "input_max": input_max,
+        "start_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
+        "end_arr": np.array([0.0, 0.0, 0.0]),
+        "trans_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
     }
 
     start_time=time.time()

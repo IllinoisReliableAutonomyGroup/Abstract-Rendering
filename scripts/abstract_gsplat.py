@@ -1,6 +1,6 @@
 import os 
-import sys
 import json 
+import sys
 
 import time
 import numpy as np 
@@ -12,7 +12,7 @@ from tqdm import tqdm
 from scipy.spatial.transform import Rotation 
 from PIL import Image 
 
-grandfather_path = os.path.abspath(os.path.join(__file__, "../../.."))
+grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 sys.path.append(grandfather_path)
 
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
@@ -22,6 +22,12 @@ from utils import dir_to_rpy_and_rot, convert_input_to_rot
 from utils import generate_bound,  generate_samples
 from utils import alpha_blending, alpha_blending_interval
 from render_models import GsplatRGB, TransferModel
+
+
+
+# from simple_model2_alphatest5_2 import AlphaModel, DepthModel, MeanModel
+# from rasterization_pytorch import rasterize_gaussians_pytorch_rgb
+# from generate_poses import generate_poses
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -134,13 +140,12 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
 
     
 def main(setup_dict):
-    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max"]
-    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max = (setup_dict[key] for key in key_list)
+    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max","start_arr", "end_arr", "trans_arr"]
+    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max, start_arr, end_arr, trans_arr = (setup_dict[key] for key in key_list)
     
     # Load Already Trained Scene Files
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    script_dir = os.path.join(script_dir, grandfather_path)
-    scene_folder = os.path.join(script_dir, 'nerfstudio/', scene_path)
+    scene_folder = os.path.join(script_dir, '../nerfstudio/', scene_path)
     transform_file = os.path.join(scene_folder, 'dataparser_transforms.json')
     checkpoint_file = os.path.join(scene_folder, 'nerfstudio_models/', checkpoint_filename)
 
@@ -198,12 +203,12 @@ def main(setup_dict):
         bg_color = torch.from_numpy(bg_img/255).to(DEVICE)  # shape: (H, W, 3)
     
     # Generate Rotation Matrix
-    start_arr = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
-    end_arr = np.array([0.0, 0.0, 0.0])
+    # start_arr = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
+    # end_arr = np.array([0.0, 0.0, 0.0])
     rot = dir_to_rpy_and_rot(start_arr, end_arr)
     rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
-    trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
-    trans = torch.from_numpy(trans).to(device=DEVICE, dtype=DTYPE)
+    # trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
+    trans = torch.from_numpy(trans_arr).to(device=DEVICE, dtype=DTYPE)
     # print("rot:",rot)
 
     inputs_lb, inputs_ub, inputs_ref = generate_bound(input_min, input_max, partition_per_dim, selection_per_dim) # [partition_per_dim^N, N]
@@ -303,10 +308,9 @@ if __name__=='__main__':
     render_method = 'gsplat_rgb'
     object_name = "airplane_grey"
     
-    factor = 1
-    width = 64*factor#80#
-    height = 64*factor#80#
-    f = 80*factor#100#
+    width = 64*2#80#
+    height = 64*2#80#
+    f = 80*2#100#
     tile_size = 6*2 #4
 
     partition_per_dim = 20000##5000
@@ -317,9 +321,9 @@ if __name__=='__main__':
 
     bg_img_path = None#"./BgImg/mountain.jpg"
 
-    domain_type = "x"
+    domain_type = "round"
 
-    save_folder = "Outputs/AbstractImages/"+object_name+"/"+domain_type
+    save_folder = "../Outputs/AbstractImages/"+object_name+"/"+domain_type
     save_ref = True
     save_bound = True
 
@@ -334,11 +338,11 @@ if __name__=='__main__':
     # input_min = torch.tensor([-2]).to(DEVICE)
     # input_max = torch.tensor([2]).to(DEVICE)
     # z and x
-    input_min = torch.tensor([-1]).to(DEVICE)
-    input_max = torch.tensor([1]).to(DEVICE)
+    # input_min = torch.tensor([-1]).to(DEVICE)
+    # input_max = torch.tensor([1]).to(DEVICE)
     # round
-    # input_min = torch.tensor([0]).to(DEVICE)
-    # input_max = torch.tensor([2*np.pi-0.001]).to(DEVICE)
+    input_min = torch.tensor([0]).to(DEVICE)
+    input_max = torch.tensor([2*np.pi-0.001]).to(DEVICE)
 
     setup_dict = {
         "bound_method": bound_method,
@@ -359,6 +363,9 @@ if __name__=='__main__':
         "N_samples": N_samples,
         "input_min": input_min,
         "input_max": input_max,
+        "start_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
+        "end_arr": np.array([0.0, 0.0, 0.0]),
+        "trans_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
     }
 
     start_time=time.time()
