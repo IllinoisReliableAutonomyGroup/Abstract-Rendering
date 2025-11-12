@@ -43,6 +43,39 @@ bound_opts = {
         'early_stop_patience':5},
 }, 
 
+# --- Drop-in: helper to save abstract record (.pt with 8 fields)
+def save_abstract_record(save_dir, index, lower_img, upper_img):
+    """
+    Save an abstract image record with required fields:
+      lower, upper, lA, uA, lb, ub, xl, xu
+    Currently only lower/upper are populated; others are left None.
+    lower_img / upper_img are expected as arrays/tensors in [0,1] with shape (H,W,3).
+    """
+    if isinstance(lower_img, np.ndarray):
+        lower_t = torch.from_numpy(lower_img.astype(np.float32, copy=False))
+    else:
+        lower_t = lower_img.to(dtype=torch.float32).detach().cpu()
+
+    if isinstance(upper_img, np.ndarray):
+        upper_t = torch.from_numpy(upper_img.astype(np.float32, copy=False))
+    else:
+        upper_t = upper_img.to(dtype=torch.float32).detach().cpu()
+
+    record = {
+        "lower": lower_t,  # (H, W, 3), float32, [0,1]
+        "upper": upper_t,  # (H, W, 3), float32, [0,1]
+        "lA": None,
+        "uA": None,
+        "lb": None,
+        "ub": None,
+        "xl": None,
+        "xu": None,
+    }
+    out_path = os.path.join(save_dir, f"abstract_{index:06d}.pt")
+    torch.save(record, out_path)
+    return out_path
+
+
 def alpha_blending_ref(net, input_ref):
     
     N = net.call_model("get_num")
@@ -282,12 +315,15 @@ def main(setup_dict):
             res_ref.save(f'{save_folder_full}/ref_{absimg_num}.png')
 
         if save_bound:
-            img_lb = (img_lb.clip(min=0.0, max=1.0)*255).astype(np.uint8)
-            img_ub = (img_ub.clip(min=0.0, max=1.0)*255).astype(np.uint8)
-            res_lb = Image.fromarray(img_lb)
-            res_ub = Image.fromarray(img_ub)
-            res_lb.save(f'{save_folder_full}/lb_{absimg_num}.png')
-            res_ub.save(f'{save_folder_full}/ub_{absimg_num}.png')
+            # --- Drop-in replacement: save .pt record with 8 fields instead of PNGs
+            img_lb_f = img_lb.clip(min=0.0, max=1.0).astype(np.float32, copy=False)
+            img_ub_f = img_ub.clip(min=0.0, max=1.0).astype(np.float32, copy=False)
+            save_abstract_record(
+                save_dir=save_folder_full,
+                index=absimg_num,
+                lower_img=img_lb_f,
+                upper_img=img_ub_f,
+            )
 
         absimg_num+=1
 
@@ -373,5 +409,3 @@ if __name__=='__main__':
     end_time = time.time()
 
     print(f"Running Time:{(end_time-start_time)/60:.4f} min")
-
-
