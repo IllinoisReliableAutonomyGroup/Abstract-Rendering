@@ -6,6 +6,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import onnx
+import onnx2pytorch
+
+# 🔧 compatibility patch for onnx2pytorch Pad(constant=...)
+import onnx2pytorch.operations.pad as pad_module
+import onnx2pytorch.convert.operations as conv_ops
+
+# Take the original Pad class as a base
+_OrigPad = pad_module.Pad
+
+class CompatPad(_OrigPad):
+    def __init__(self, *args, constant=None, value=None, **kwargs):
+        # Swallow both 'constant' and 'value' kwargs and rely on the default
+        # padding behavior of the original Pad implementation.
+        # This avoids TypeError: unexpected 'constant'/'value' in old versions.
+        super().__init__(*args, **kwargs)
+
+# Patch both the pad module and the convert.operations binding
+pad_module.Pad = CompatPad
+conv_ops.Pad = CompatPad
+# 🔧 end patch
+
 from onnx2pytorch import ConvertModel
 
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
@@ -53,6 +74,7 @@ def resize_to_square(img_hwc: torch.Tensor, size: int) -> torch.Tensor:
 
 def compute_bounds_for_record(
     bounded_model: BoundedModule,
+    base_model: nn.Module,
     record: dict,
     device: torch.device,
     img_size: int,
@@ -77,13 +99,12 @@ def compute_bounds_for_record(
     ptb = PerturbationLpNorm(x_L=lower_r, x_U=upper_r)
     x = BoundedTensor(x_center, ptb)
 
-    out_lb, out_ub = bounded_model.compute_bounds(x=(x,), method="backward")
+    out_lb, out_ub = bounded_model.compute_bounds(x=(x,), method="IBP")
 
     with torch.no_grad():
-        out_nom = bounded_model.network(x_center)
+        out_nom = base_model(x_center)
 
     return out_lb.detach(), out_ub.detach(), out_nom.detach()
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -113,6 +134,13 @@ def main():
         default="cuda",
         help="Device to run on (cuda or cpu).",
     )
+
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="If set, only process the first N abstract_*.pt records.",
+    )
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
@@ -129,14 +157,17 @@ def main():
     out_ub_all = []
     out_nom_all = []
 
-    for path, rec in iter_abstract_records(abstract_dir):
+    for idx, (path, rec) in enumerate(iter_abstract_records(abstract_dir)):
         out_lb, out_ub, out_nom = compute_bounds_for_record(
-            bounded_yolo, rec, device, args.img_size
+            bounded_yolo, yolo, rec, device, args.img_size
         )
         out_lb_all.append(out_lb.cpu())
         out_ub_all.append(out_ub.cpu())
         out_nom_all.append(out_nom.cpu())
         print(f"Processed {path.name}")
+
+        if args.max_samples is not None and (idx + 1) >= args.max_samples:
+            break
 
     if not out_lb_all:
         print(f"No abstract_*.pt files found in {abstract_dir}")

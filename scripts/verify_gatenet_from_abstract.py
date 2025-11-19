@@ -10,23 +10,26 @@ from utils import iter_abstract_records
 from DownStreamModel.gatenet.gatenet import GateNet
 
 
-def default_gatenet_config() -> dict:
+def default_gatenet_config(img_size: int) -> dict:
     """
-    Minimal GateNet config matching the fields used in gatenet.py.
-    Adjust if your training used different values.
+    GateNet config matching gatenet.py training setup.
+
+    img_size: height/width of input images (e.g., 64)
     """
     return {
-        "batch_norm_decay": 0.9,
-        "batch_norm_epsilon": 1e-5,
-        "dropout_rate": 0.5,
+        "input_shape": (3, img_size, img_size),
+        "output_shape": (3,),      # GateNet predicts 3D quantity in the training script
+        "l2_weight_decay": 1e-4,
+        "batch_norm_decay": 0.99,
+        "batch_norm_epsilon": 1e-3,
     }
 
 
-def load_gatenet(ckpt_path: str, device: torch.device) -> torch.nn.Module:
+def load_gatenet(ckpt_path: str, img_size: int, device: torch.device) -> torch.nn.Module:
     """
     Load a GateNet model from DownStreamModel/gatenet/checkpoint_*.pth.
     """
-    config = default_gatenet_config()
+    config = default_gatenet_config(img_size)
     model = GateNet(config)
 
     ckpt = torch.load(ckpt_path, map_location=device)
@@ -132,7 +135,7 @@ def main():
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    model = load_gatenet(args.ckpt, device)
+    model = load_gatenet(args.ckpt, args.img_size, device)
 
     abstract_dir = Path(args.abstract_dir)
     out_lb_all = []

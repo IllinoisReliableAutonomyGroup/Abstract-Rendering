@@ -77,6 +77,12 @@ def compute_bounds_for_record(
     lower = record["lower"].permute(2, 0, 1).unsqueeze(0).to(device=device, dtype=torch.float32)
     upper = record["upper"].permute(2, 0, 1).unsqueeze(0).to(device=device, dtype=torch.float32)
 
+    # 🔹 NEW: resize to CIFAR-10 resolution expected by resnet2b/4b
+    target_size = (32, 32)
+    lower = F.interpolate(lower, size=target_size, mode="bilinear", align_corners=False)
+    upper = F.interpolate(upper, size=target_size, mode="bilinear", align_corners=False)
+
+    # then normalize
     lower_n, upper_n = normalize_bounds(lower, upper, device)
 
     # center of the interval
