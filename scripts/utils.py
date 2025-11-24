@@ -7,6 +7,36 @@ import json
 from scipy.spatial.transform import Rotation 
 import itertools
 
+from pathlib import Path
+from typing import Iterator, Tuple, Dict, Any, Union
+
+
+def load_abstract_record(path: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Load a saved abstract image record (.pt) and return a dict with keys:
+      lower, upper, lA, uA, lb, ub, xl, xu
+
+    This matches the format produced by abstract_gsplat.py.
+    """
+    path = Path(path)
+    rec = torch.load(path, map_location="cpu")
+
+    required_keys = ["lower", "upper", "lA", "uA", "lb", "ub", "xl", "xu"]
+    for k in required_keys:
+        if k not in rec:
+            raise KeyError(f"Missing key '{k}' in abstract record {path}: {k}")
+
+    return rec
+
+
+def iter_abstract_records(folder: Union[str, Path]) -> Iterator[Tuple[Path, Dict[str, Any]]]:
+    """
+    Yield (path, record) for each abstract_*.pt in a folder, sorted by filename.
+    """
+    folder = Path(folder)
+    for p in sorted(folder.glob("abstract_*.pt")):
+        yield p, load_abstract_record(p)
+
 def transfer_c2w_to_w2c(c2w):
     """
     function that converts c2w to gsplat world2camera matrix, using compile for some speed
