@@ -1,6 +1,11 @@
 import argparse
 from pathlib import Path
 
+import os,sys
+
+grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
+sys.path.append(grandfather_path)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -99,7 +104,7 @@ def compute_bounds_for_record(
     ptb = PerturbationLpNorm(x_L=lower_r, x_U=upper_r)
     x = BoundedTensor(x_center, ptb)
 
-    out_lb, out_ub = bounded_model.compute_bounds(x=(x,), method="IBP")
+    out_lb, out_ub = bounded_model.compute_bounds(x=(x,), method="backward")
 
     with torch.no_grad():
         out_nom = base_model(x_center)

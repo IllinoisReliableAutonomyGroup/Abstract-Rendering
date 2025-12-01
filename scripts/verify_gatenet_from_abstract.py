@@ -4,6 +4,11 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
+import os,sys
+
+grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
+sys.path.append(grandfather_path)
+
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 
 from utils import iter_abstract_records
