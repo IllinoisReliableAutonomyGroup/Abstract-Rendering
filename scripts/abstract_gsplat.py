@@ -23,11 +23,7 @@ from utils import generate_bound,  generate_samples
 from utils import alpha_blending, alpha_blending_interval
 from render_models import GsplatRGB, TransferModel
 
-
-
-# from simple_model2_alphatest5_2 import AlphaModel, DepthModel, MeanModel
-# from rasterization_pytorch import rasterize_gaussians_pytorch_rgb
-# from generate_poses import generate_poses
+import argparse
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -173,8 +169,8 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
 
     
 def main(setup_dict):
-    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max","start_arr", "end_arr", "trans_arr"]
-    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max, start_arr, end_arr, trans_arr = (setup_dict[key] for key in key_list)
+    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max", "start_arr", "end_arr", "trans_arr", "bg_pure_color"]
+    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max, start_arr, end_arr, trans_arr, bg_pure_color = (setup_dict[key] for key in key_list)
     
     # Load Already Trained Scene Files
     script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -227,7 +223,7 @@ def main(setup_dict):
 
     # Define Background Image
     if bg_img_path is None:
-        bg_pure_color = torch.tensor([123/255, 139/255, 196/255])
+        bg_pure_color = torch.tensor(bg_pure_color)
         bg_color = bg_pure_color.view(1, 1, 3).repeat(height, width,  1).to(DEVICE)
     else:
         bg_img = Image.open(bg_img_path).convert("RGB")  # ensure 3 channels
@@ -337,75 +333,70 @@ def main(setup_dict):
 
     return 0
 
-if __name__=='__main__':
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Abstract Gsplat with configurable parameters.")
+    parser.add_argument("--bound_method", type=str, default="forward", help="Bounding method to use.")
+    parser.add_argument("--render_method", type=str, default="gsplat_rgb", help="Rendering method to use.")
+    parser.add_argument("--object_name", type=str, default="airplane_grey", help="Name of the object.")
+    parser.add_argument("--domain_type", type=str, default="round", help="Domain type.")
 
-    # Setup Parameters
-    bound_method = 'forward'
-    render_method = 'gsplat_rgb'
-    object_name = "airplane_grey"
+    parser.add_argument("--width", type=int, default=128, help="Width of the rendered image.")
+    parser.add_argument("--height", type=int, default=128, help="Height of the rendered image.")
+    parser.add_argument("--f", type=int, default=160, help="Focal length.")
+    parser.add_argument("--tile_size", type=int, default=12, help="Tile size for rendering.")
+    parser.add_argument("--partition_per_dim", type=int, default=20000, help="Partition per dimension.")
+    parser.add_argument("--selection_per_dim", type=int, default=200, help="Selection per dimension.")
     
-    width = 64*2#80#
-    height = 64*2#80#
-    f = 80*2#100#
-    tile_size = 6*2 #4
+    parser.add_argument("--data_time", type=str, default="2025-08-02_025446", help="Reconstruction Time.")
+    parser.add_argument("--checkpoint_filename", type=str, default="step-000299999.ckpt", help="Checkpoint filename.")
+    parser.add_argument("--bg_img_path", type=str, default=None, help="Path to the background image.")
+    parser.add_argument("--bg_pure_color", type=float, nargs=3, default=[123/255, 139/255, 196/255], help="Pure background color as RGB values in [0, 1].")
+    
+    parser.add_argument("--save_ref", type=bool, default=True, help="Whether to save reference images.")
+    parser.add_argument("--save_bound", type=bool, default=True, help="Whether to save bound images.")
+    parser.add_argument("--N_samples", type=int, default=5, help="Number of samples.")
+    parser.add_argument("--input_min", type=float, nargs='+', default=[-0.1], help="Minimum input values.")
+    parser.add_argument("--input_max", type=float, nargs='+', default=[0.1], help="Maximum input values.")
 
-    partition_per_dim = 20000##5000
-    selection_per_dim = 200
+    parser.add_argument("--start_arr", type=float, nargs=3, default=[-5.64, 2.05, 0.0], help="Start array for transformation.")
+    parser.add_argument("--end_arr", type=float, nargs=3, default=[0.0, 0.0, 0.0], help="End array for transformation.")
+    parser.add_argument("--trans_arr", type=float, nargs=3, default=[-5.64, 2.05, 0.0], help="Translation array.")
 
-    scene_path = 'outputs/airplane_grey/splatfacto/2025-08-02_025446'
-    checkpoint_filename = "step-000299999.ckpt"
+    args = parser.parse_args()
 
-    bg_img_path = None#"./BgImg/mountain.jpg"
-
-    domain_type = "round"
-
-    save_folder = "../Outputs/AbstractImages/"+object_name+"/"+domain_type
-    save_ref = True
-    save_bound = True
-
-    N_samples = 5
-
-    # input_min = torch.tensor([6, np.deg2rad(13), np.deg2rad(-1)]).to(DEVICE)
-    # input_max = torch.tensor([7, np.deg2rad(15), np.deg2rad(1)]).to(DEVICE)
-    # yaw
-    # input_min = torch.tensor([-np.deg2rad(30)]).to(DEVICE)
-    # input_max = torch.tensor([np.deg2rad(30)]).to(DEVICE)
-    # y
-    # input_min = torch.tensor([-2]).to(DEVICE)
-    # input_max = torch.tensor([2]).to(DEVICE)
-    # z and x
-    # input_min = torch.tensor([-1]).to(DEVICE)
-    # input_max = torch.tensor([1]).to(DEVICE)
-    # round
-    input_min = torch.tensor([0]).to(DEVICE)
-    input_max = torch.tensor([2*np.pi-0.001]).to(DEVICE)
+    # Automatically determine scene_path and save_folder
+    if args.render_method == "gsplat_rgb":
+        render_method_nerfstudio = "splatfacto"
+    scene_path = f"outputs/{args.object_name}/{render_method_nerfstudio}/{args.data_time}"
+    save_folder = f"../Outputs/AbstractImages/{args.object_name}/{args.domain_type}"
 
     setup_dict = {
-        "bound_method": bound_method,
-        "render_method": render_method,
-        "width": width,
-        "height": height,
-        "f": f,
-        "tile_size": tile_size,
-        "partition_per_dim": partition_per_dim,
-        "selection_per_dim": selection_per_dim,
+        "bound_method": args.bound_method,
+        "render_method": args.render_method,
+        "width": args.width,
+        "height": args.height,
+        "f": args.f,
+        "tile_size": args.tile_size,
+        "partition_per_dim": args.partition_per_dim,
+        "selection_per_dim": args.selection_per_dim,
         "scene_path": scene_path,
-        "checkpoint_filename": checkpoint_filename,
-        "bg_img_path": bg_img_path,
+        "checkpoint_filename": args.checkpoint_filename,
+        "bg_img_path": args.bg_img_path,
         "save_folder": save_folder,
-        "save_ref": save_ref,
-        "save_bound": save_bound,
-        "domain_type": domain_type,
-        "N_samples": N_samples,
-        "input_min": input_min,
-        "input_max": input_max,
-        "start_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
-        "end_arr": np.array([0.0, 0.0, 0.0]),
-        "trans_arr": np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6,
+        "save_ref": args.save_ref,
+        "save_bound": args.save_bound,
+        "domain_type": args.domain_type,
+        "N_samples": args.N_samples,
+        "input_min": torch.tensor(args.input_min).to(DEVICE),
+        "input_max": torch.tensor(args.input_max).to(DEVICE),
+        "start_arr": np.array(args.start_arr),
+        "end_arr": np.array(args.end_arr),
+        "trans_arr": np.array(args.trans_arr),
+        "bg_pure_color": args.bg_pure_color,
     }
 
-    start_time=time.time()
+    start_time = time.time()
     main(setup_dict)
     end_time = time.time()
 
-    print(f"Running Time:{(end_time-start_time)/60:.4f} min")
+    print(f"Running Time: {(end_time - start_time) / 60:.4f} min")

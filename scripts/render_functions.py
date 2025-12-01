@@ -82,15 +82,22 @@ class GsplatRGBOrigin(nn.Module):
         means_hom_cam = torch.matmul(pose, means_hom_world[None, :, :].transpose(-1,-2)).transpose(-1,-2)    # [1, N, 4]
         means_cam = means_hom_cam[:, :, :3] # [1, N, 3]
         depth = means_cam[0, :, 2] # [N, ]
+        # print(depth[:10])
+        # print(self.scene_dict_all["opacities"][6],self.scene_dict_all["colors"][6])
 
         # Step 2: Filter Gaussians based on depth 
-        mask = (depth >= 0.01)
+        mask = (depth >= 0.7)
         sorted_indices = torch.argsort(depth[mask])
 
         self.scene_dict_sorted = {
             name: attr[mask][sorted_indices]
             for name, attr in self.scene_dict_all.items()
         }
+
+
+        N_masked = mask.sum().item()
+        #print(f"Contains {N_masked} Gaussians.")
+
 
     def get_num(self):
         if self.scene_dict == None:
@@ -225,6 +232,7 @@ class GsplatRGBOrigin(nn.Module):
         bg_color = self.bg_color[hl:hu, wl:wu, :].view(1, hu-hl, wu-wl, 1, 3)
 
         if self.scene_dict_sorted is None:
+            print('Warning: No Gaussians to render, return background color only!')
             return bg_color.squeeze(-2)
         
         else:
@@ -232,8 +240,10 @@ class GsplatRGBOrigin(nn.Module):
             DEVICE = self.scene_dict_sorted["opacities"].device
 
             alpha = self.render_alpha(pose, self.scene_dict_sorted) # [1, TH, TW, N, 1]
-            colors = self.scene_dict_sorted["colors"].view(1, 1, 1, N, 3).repeat(1, hu-hl, wu-wl, 1, 1)
 
+            # print(alpha[0,:2,:2,:5])
+            colors = self.scene_dict_sorted["colors"].view(1, 1, 1, N, 3).repeat(1, hu-hl, wu-wl, 1, 1)
+            # print(colors[0,:2,:2,:5])
             ones = torch.ones((1, hu-hl, wu-wl, 1, 1), device=DEVICE)
             alpha = torch.cat([alpha, ones], dim=-2) # [1, TH, TW, N+1, 1]
             #print(colors.shape, bg_color.shape)
