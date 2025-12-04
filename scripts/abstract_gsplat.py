@@ -44,8 +44,6 @@ def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, u
     """
     Save an abstract image record with required fields:
       lower, upper, lA, uA, lb, ub, xl, xu
-    Currently only lower/upper are populated; others are left None.
-    lower_img / upper_img are expected as arrays/tensors in [0,1] with shape (H,W,3).
     """
 
     if isinstance(lower_input, np.ndarray):
@@ -59,12 +57,12 @@ def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, u
         upper_i = upper_input.to(dtype=torch.float32).detach().cpu()
 
     if isinstance(lower_img, np.ndarray):
-        lower_t = torch.from_numpy(lower_img.astype(np.float32, copy=False))
+        lower_t = torch.from_numpy(lower_img.astype(np.float32))
     else:
-        lower_t = lower_img.to(dtype=torch.float32).detach().cpu()
+        lower_t = lower_img.to(dtype=torch.float32).cpu()
 
     if isinstance(upper_img, np.ndarray):
-        upper_t = torch.from_numpy(upper_img.astype(np.float32, copy=False))
+        upper_t = torch.from_numpy(upper_img.astype(np.float32))
     else:
         upper_t = upper_img.to(dtype=torch.float32).detach().cpu()
     # print("lower_intput:", lower_input)
@@ -79,6 +77,7 @@ def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, u
         "lb": None,
         "ub": None,
     }
+
     out_path = os.path.join(save_dir, f"abstract_{index:06d}.pt")
     torch.save(record, out_path)
     return out_path
@@ -333,6 +332,8 @@ def main(setup_dict):
                 upper_input=input_ub,
                 lower_img=img_lb_f,
                 upper_img=img_ub_f,
+                x_l=x_l,
+                x_u=x_u,
             )
 
         absimg_num+=1
