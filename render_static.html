@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Plot Viewer</title>
+    <link rel="icon" href="data:," type="image/x-icon"> <!-- Suppress favicon.ico request -->
+    <link rel="stylesheet" href="style_static.css"> <!-- Link to external CSS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.min.js"></script>
+</head>
+<body>
+    <div class="grid-container">
+        <!-- Interactive JSON 1 -->
+        <div class="interactive-container" id="container-1">
+            <div class="image-container">
+                <div>
+                    <h3>Lower Bound</h3>
+                    <img id="img-lower-1" src="" alt="Lower Bound">
+                </div>
+                <div>
+                    <h3>Ref Image</h3>
+                    <img id="img-ref-1" src="" alt="Ref Image">
+                </div>
+                <div>
+                    <h3>Upper Bound</h3>
+                    <img id="img-upper-1" src="" alt="Upper Bound">
+                </div>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-pose-1">Camera Pose:</label>
+                <input type="range" id="slider-pose-1" class="slider" min="0" max="9" step="1" value="5">
+                <span id="pose-value-1">0.50</span>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-range-1">Perturbation Range:</label>
+                <input type="range" id="slider-range-1" class="slider" min="0" max="9" step="1" value="0">
+                <span id="range-value-1">0.00</span>
+            </div>
+        </div>
+
+        <!-- Interactive JSON 2 -->
+        <div class="interactive-container" id="container-2">
+            <div class="image-container">
+                <div>
+                    <h3>Lower Bound</h3>
+                    <img id="img-lower-2" src="" alt="Lower Bound">
+                </div>
+                <div>
+                    <h3>Ref Image</h3>
+                    <img id="img-ref-2" src="" alt="Ref Image">
+                </div>
+                <div>
+                    <h3>Upper Bound</h3>
+                    <img id="img-upper-2" src="" alt="Upper Bound">
+                </div>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-pose-2">Camera Pose:</label>
+                <input type="range" id="slider-pose-2" class="slider" min="0" max="9" step="1" value="5">
+                <span id="pose-value-2">0.50</span>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-range-2">Perturbation Range:</label>
+                <input type="range" id="slider-range-2" class="slider" min="0" max="9" step="1" value="0">
+                <span id="range-value-2">0.00</span>
+            </div>
+        </div>
+
+        <!-- Interactive JSON 3 -->
+        <div class="interactive-container" id="container-3">
+            <div class="image-container">
+                <div>
+                    <h3>Lower Bound</h3>
+                    <img id="img-lower-3" src="" alt="Lower Bound">
+                </div>
+                <div>
+                    <h3>Ref Image</h3>
+                    <img id="img-ref-3" src="" alt="Ref Image">
+                </div>
+                <div>
+                    <h3>Upper Bound</h3>
+                    <img id="img-upper-3" src="" alt="Upper Bound">
+                </div>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-pose-3">Camera Pose:</label>
+                <input type="range" id="slider-pose-3" class="slider" min="0" max="9" step="1" value="5">
+                <span id="pose-value-3">0.50</span>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-range-3">Perturbation Range:</label>
+                <input type="range" id="slider-range-3" class="slider" min="0" max="9" step="1" value="0">
+                <span id="range-value-3">0.00</span>
+            </div>
+        </div>
+
+        <!-- Interactive JSON 4 -->
+        <div class="interactive-container" id="container-4">
+            <div class="image-container">
+                <div>
+                    <h3>Lower Bound</h3>
+                    <img id="img-lower-4" src="" alt="Lower Bound">
+                </div>
+                <div>
+                    <h3>Ref Image</h3>
+                    <img id="img-ref-4" src="" alt="Ref Image">
+                </div>
+                <div>
+                    <h3>Upper Bound</h3>
+                    <img id="img-upper-4" src="" alt="Upper Bound">
+                </div>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-pose-4">Camera Pose:</label>
+                <input type="range" id="slider-pose-4" class="slider" min="0" max="9" step="1" value="5">
+                <span id="pose-value-4">0.50</span>
+            </div>
+            <div class="slider-container">
+                <label class="slider-label" for="slider-range-4">Perturbation Range:</label>
+                <input type="range" id="slider-range-4" class="slider" min="0" max="9" step="1" value="0">
+                <span id="range-value-4">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const jsonUrls = [
+            "Outputs/Analysis/airplane_grey/z/interactive_plot.json",
+            "Outputs/Analysis/airplane_grey/x/interactive_plot.json",
+            "Outputs/Analysis/chair/y/interactive_plot.json",
+            "Outputs/Analysis/dozer/y/interactive_plot.json"
+        ];
+
+        jsonUrls.forEach((jsonUrl, index) => {
+            fetch(jsonUrl)
+                .then(response => response.json())
+                .then(data => {
+                    const sliderPose = document.getElementById(`slider-pose-${index + 1}`);
+                    const sliderRange = document.getElementById(`slider-range-${index + 1}`);
+                    const poseValue = document.getElementById(`pose-value-${index + 1}`);
+                    const rangeValue = document.getElementById(`range-value-${index + 1}`);
+                    const imgLower = document.getElementById(`img-lower-${index + 1}`);
+                    const imgRef = document.getElementById(`img-ref-${index + 1}`);
+                    const imgUpper = document.getElementById(`img-upper-${index + 1}`);
+
+                    const poseValues = data.pose_values;
+                    const rangeValues = data.range_values;
+
+                    function updateImages() {
+                        const poseIdx = parseInt(sliderPose.value);
+                        const rangeIdx = parseInt(sliderRange.value);
+
+                        const mappedPose = poseValues[poseIdx];
+                        const mappedRange = rangeValues[rangeIdx];
+
+                        poseValue.textContent = (poseIdx / 9).toFixed(2);
+                        rangeValue.textContent = (rangeIdx / 9).toFixed(2);
+
+                        const imgIndex = poseIdx * data.num_ranges + rangeIdx;
+
+                        imgLower.src = `data:image/png;base64,${data.images.lower[imgIndex]}`;
+                        imgRef.src = `data:image/png;base64,${data.images.ref[imgIndex]}`;
+                        imgUpper.src = `data:image/png;base64,${data.images.upper[imgIndex]}`;
+                    }
+
+                    sliderPose.addEventListener("input", updateImages);
+                    sliderRange.addEventListener("input", updateImages);
+
+                    updateImages();
+                })
+                .catch(error => console.error(`Error loading JSON file ${jsonUrl}:`, error));
+        });
+    </script>
+</body>
+</html>

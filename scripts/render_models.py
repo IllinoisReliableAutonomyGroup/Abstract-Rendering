@@ -87,7 +87,7 @@ class GsplatRGB(nn.Module):
         depth = means_cam[0, :, 2] # [N, ]
 
         # Step 2: Filter Gaussians based on depth 
-        mask = (depth >= 0.01)
+        mask = (depth >= 0.7) & (depth <= 2.0)
         sorted_indices = torch.argsort(depth[mask])
 
         self.scene_dict_sorted = {
@@ -111,7 +111,7 @@ class GsplatRGB(nn.Module):
 
         # Filter Too small Alpha
         idx1, idx2, idx3 =50, 200, 1000
-        mask = (alpha_max>0.1) 
+        mask = (alpha_max>0.05) 
         mask[idx1:] = mask[idx1:] & (alpha_max[idx1:] > 0.15) 
         mask[idx2:] = mask[idx2:] & (alpha_max[idx2:] > 0.2) 
         mask[idx3:] = mask[idx3:] & (alpha_max[idx3:] > 0.3) 

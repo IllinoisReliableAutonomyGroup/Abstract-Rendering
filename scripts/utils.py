@@ -104,11 +104,23 @@ def quaternion_to_rotation_matrix(quats):
 
 #     return rot_matrix
 
-def dir_to_rpy_and_rot(target, pose):
+def rotate_vector_around_axis(v, axis, angle_deg):
+    angle = np.radians(angle_deg)
+    axis = axis / np.linalg.norm(axis)
+    c = np.cos(angle)
+    s = np.sin(angle)
+    K = np.array([[0, -axis[2], axis[1]],
+                  [axis[2], 0, -axis[0]],
+                  [-axis[1], axis[0], 0]])
+    R = np.eye(3)*c + s*K + (1-c)*np.outer(axis, axis)
+    return R @ v
+
+def dir_to_rpy_and_rot(target, pose, target_roll=0):
     forward = target - pose
     forward = forward / np.linalg.norm(forward)
 
-    world_up = np.array([0, 1, 0], dtype=float)
+    world_up_default = np.array([0, 1, 0], dtype=float)
+    world_up = rotate_vector_around_axis(world_up_default, forward, target_roll)
     # If forward is parallel to world_up, choose another up vector
     if np.allclose(np.abs(np.dot(forward, world_up)), 1.0):
         world_up = np.array([0, 0, 1], dtype=float)
@@ -116,6 +128,9 @@ def dir_to_rpy_and_rot(target, pose):
     right = np.cross(world_up, forward)
     right = right / np.linalg.norm(right)
     up = np.cross(forward, right)
+
+    # up = world_up - np.dot(world_up, forward) * forward
+    # up = up / np.linalg.norm(up)
 
     rot_matrix = np.column_stack((right, up, forward))  # columns: right, up, forward
     return rot_matrix
@@ -146,7 +161,38 @@ def convert_input_to_translation(input, trans, type):
             z = input[:, 0]
             x = torch.ones_like(z)*trans[0]
             y = torch.ones_like(z)*trans[1]
+
+        elif type == "roll":
+
+            roll = input[:, 0]
+            initial_roll = torch.arctan2(trans[2],trans[1])
+            r=torch.sqrt(trans[1]**2+trans[2]**2)
+
+            x = torch.ones_like(roll)*trans[0]
+            y = r * torch.cos(roll+initial_roll)
+            z = r * torch.sin(roll+initial_roll)
+            
+        elif type == "pitch":
+
+            pitch = input[:, 0]
+            initial_pitch = torch.arctan2(trans[2],trans[0])
+            r=torch.sqrt(trans[0]**2+trans[2]**2)
+
+            x = r * torch.cos(pitch+initial_pitch)
+            y = torch.ones_like(pitch)*trans[1]
+            z = r * torch.sin(pitch+initial_pitch)
+            
         elif type == "yaw":
+
+            yaw = input[:, 0]
+            initial_yaw = torch.arctan2(trans[1],trans[0])
+            r=torch.sqrt(trans[0]**2+trans[1]**2)
+            
+            x = r * torch.cos(yaw+initial_yaw)
+            y = r * torch.sin(yaw+initial_yaw)
+            z = torch.ones_like(yaw)*trans[2]
+
+        elif type == "old_yaw":
 
             yaw = input[:, 0]
 
@@ -166,13 +212,13 @@ def convert_input_to_translation(input, trans, type):
 
         return torch.stack([x, y, z], dim=-1)
 
-def convert_input_to_rot(input, trans, type):
+def convert_input_to_rot(input, trans, type, target_roll=0):
     translation = convert_input_to_translation(input, trans, type)
     translation = translation.detach().cpu().numpy().squeeze(0) #[3, ]
 
     center = np.zeros((3,))
 
-    rot = dir_to_rpy_and_rot(translation, center)
+    rot = dir_to_rpy_and_rot(translation, center, target_roll)
 
     return rot
 

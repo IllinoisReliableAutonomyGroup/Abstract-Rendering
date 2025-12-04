@@ -1,0 +1,43 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* Two columns */
+    gap: 25px; /* Larger gap between setups */
+    padding: 10px;
+}
+
+.interactive-container {
+    display: inline-block;
+    width: 100%;
+    max-width: 800px;
+}
+
+.image-container {
+    display: flex;
+    justify-content: center;
+    gap: 10px; /* Smaller gap between images of the same setup */
+    margin-top: 10px; /* Reduced vertical spacing */
+}
+
+.image-container img {
+    border: 1px solid #ccc;
+    width: 160px; /* Reduced display size */
+    height: 160px; /* Reduced display size */
+    object-fit: contain; /* Ensure the full image is visible */
+}
+
+.slider-container {
+    margin-top: 10px; /* Reduced vertical spacing */
+}
+
+.slider-label {
+    font-size: 14px; /* Slightly smaller font for slider labels */
+}
+
+.slider {
+    width: 300px;
+}

@@ -86,7 +86,8 @@ class GsplatRGBOrigin(nn.Module):
         # print(self.scene_dict_all["opacities"][6],self.scene_dict_all["colors"][6])
 
         # Step 2: Filter Gaussians based on depth 
-        mask = (depth >= 0.7)
+        mask = (depth >= 0.7) & (depth <= 2.0)
+        # print("Before Filtering:", N, " After Filtering:", mask.sum().item())
         sorted_indices = torch.argsort(depth[mask])
 
         self.scene_dict_sorted = {

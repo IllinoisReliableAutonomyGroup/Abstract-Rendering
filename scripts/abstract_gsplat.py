@@ -40,13 +40,24 @@ bound_opts = {
 }, 
 
 # --- Drop-in: helper to save abstract record (.pt with 8 fields)
-def save_abstract_record(save_dir, index, lower_img, upper_img):
+def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, upper_img):
     """
     Save an abstract image record with required fields:
       lower, upper, lA, uA, lb, ub, xl, xu
     Currently only lower/upper are populated; others are left None.
     lower_img / upper_img are expected as arrays/tensors in [0,1] with shape (H,W,3).
     """
+
+    if isinstance(lower_input, np.ndarray):
+        lower_i = torch.from_numpy(lower_input.astype(np.float32, copy=False))
+    else:
+        lower_i = lower_input.to(dtype=torch.float32).detach().cpu()
+
+    if isinstance(upper_input, np.ndarray):
+        upper_i = torch.from_numpy(upper_input.astype(np.float32, copy=False))
+    else:
+        upper_i = upper_input.to(dtype=torch.float32).detach().cpu()
+
     if isinstance(lower_img, np.ndarray):
         lower_t = torch.from_numpy(lower_img.astype(np.float32, copy=False))
     else:
@@ -56,16 +67,17 @@ def save_abstract_record(save_dir, index, lower_img, upper_img):
         upper_t = torch.from_numpy(upper_img.astype(np.float32, copy=False))
     else:
         upper_t = upper_img.to(dtype=torch.float32).detach().cpu()
-
+    # print("lower_intput:", lower_input)
+    # print("lower_i:", lower_i)
     record = {
+        "xl": lower_i,
+        "xu": upper_i,
         "lower": lower_t,  # (H, W, 3), float32, [0,1]
         "upper": upper_t,  # (H, W, 3), float32, [0,1]
         "lA": None,
         "uA": None,
         "lb": None,
         "ub": None,
-        "xl": None,
-        "xu": None,
     }
     out_path = os.path.join(save_dir, f"abstract_{index:06d}.pt")
     torch.save(record, out_path)
@@ -169,8 +181,8 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
 
     
 def main(setup_dict):
-    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max", "start_arr", "end_arr", "trans_arr", "bg_pure_color"]
-    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max, start_arr, end_arr, trans_arr, bg_pure_color = (setup_dict[key] for key in key_list)
+    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size", "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max", "start_arr", "end_arr", "trans_arr", "bg_pure_color","target_roll"]
+    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max, start_arr, end_arr, trans_arr, bg_pure_color, target_roll = (setup_dict[key] for key in key_list)
     
     # Load Already Trained Scene Files
     script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -234,7 +246,7 @@ def main(setup_dict):
     # Generate Rotation Matrix
     # start_arr = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
     # end_arr = np.array([0.0, 0.0, 0.0])
-    rot = dir_to_rpy_and_rot(start_arr, end_arr)
+    rot = dir_to_rpy_and_rot(start_arr, end_arr,target_roll)
     rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
     # trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
     trans = torch.from_numpy(trans_arr).to(device=DEVICE, dtype=DTYPE)
@@ -255,7 +267,6 @@ def main(setup_dict):
     while inputs_queue:
         input_lb, input_ub, input_ref = inputs_queue.pop(0) # [N, ]
         input_lb, input_ub, input_ref = input_lb.unsqueeze(0), input_ub.unsqueeze(0), input_ref.unsqueeze(0) #[1, N]
-        # print(input_lb, input_ub, input_ref)
 
         # ptb = PerturbationLpNorm(x_L=input_lb,x_U=input_ub)
         # input_ptb = BoundedTensor(input_ref, ptb)
@@ -266,7 +277,7 @@ def main(setup_dict):
             img_lb = np.zeros((height, width,3))
             img_ub = np.zeros((height, width,3))
 
-        rot = convert_input_to_rot(input_ref, trans, domain_type)
+        rot = convert_input_to_rot(input_ref, trans, domain_type,target_roll)
         rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
 
         render_net = GsplatRGB(camera_dict, scene_dict_all, bg_color).to(DEVICE)
@@ -308,15 +319,18 @@ def main(setup_dict):
         if save_ref:
             img_ref= (img_ref.clip(min=0.0, max=1.0)*255).astype(np.uint8)
             res_ref = Image.fromarray(img_ref)
-            res_ref.save(f'{save_folder_full}/ref_{absimg_num}.png')
+            res_ref.save(f'{save_folder_full}/ref_{absimg_num:06d}.png')
 
         if save_bound:
             # --- Drop-in replacement: save .pt record with 8 fields instead of PNGs
             img_lb_f = img_lb.clip(min=0.0, max=1.0).astype(np.float32, copy=False)
             img_ub_f = img_ub.clip(min=0.0, max=1.0).astype(np.float32, copy=False)
+            # print("input_lb:", input_lb)
             save_abstract_record(
                 save_dir=save_folder_full,
                 index=absimg_num,
+                lower_input = input_lb,
+                upper_input=input_ub,
                 lower_img=img_lb_f,
                 upper_img=img_ub_f,
             )
@@ -340,12 +354,12 @@ if __name__ == '__main__':
     parser.add_argument("--object_name", type=str, default="airplane_grey", help="Name of the object.")
     parser.add_argument("--domain_type", type=str, default="round", help="Domain type.")
 
-    parser.add_argument("--width", type=int, default=128, help="Width of the rendered image.")
-    parser.add_argument("--height", type=int, default=128, help="Height of the rendered image.")
-    parser.add_argument("--f", type=int, default=160, help="Focal length.")
+    parser.add_argument("--width", type=int, default=256, help="Width of the rendered image.")
+    parser.add_argument("--height", type=int, default=256, help="Height of the rendered image.")
+    parser.add_argument("--f", type=int, default=320, help="Focal length.")
     parser.add_argument("--tile_size", type=int, default=12, help="Tile size for rendering.")
     parser.add_argument("--partition_per_dim", type=int, default=20000, help="Partition per dimension.")
-    parser.add_argument("--selection_per_dim", type=int, default=200, help="Selection per dimension.")
+    parser.add_argument("--selection_per_dim", type=int, default=100, help="Selection per dimension.")
     
     parser.add_argument("--data_time", type=str, default="2025-08-02_025446", help="Reconstruction Time.")
     parser.add_argument("--checkpoint_filename", type=str, default="step-000299999.ckpt", help="Checkpoint filename.")
@@ -370,6 +384,15 @@ if __name__ == '__main__':
     scene_path = f"outputs/{args.object_name}/{render_method_nerfstudio}/{args.data_time}"
     save_folder = f"../Outputs/AbstractImages/{args.object_name}/{args.domain_type}"
 
+    if args.object_name == "airplane_grey":
+        target_roll = 0.0
+    elif args.object_name == "chair":
+        target_roll = -70.55
+    elif args.object_name == "dozer":
+        target_roll = 74.55
+    elif args.object_name == "garden":
+        target_roll = 0.0
+
     setup_dict = {
         "bound_method": args.bound_method,
         "render_method": args.render_method,
@@ -393,6 +416,7 @@ if __name__ == '__main__':
         "end_arr": np.array(args.end_arr),
         "trans_arr": np.array(args.trans_arr),
         "bg_pure_color": args.bg_pure_color,
+        "target_roll": target_roll,
     }
 
     start_time = time.time()

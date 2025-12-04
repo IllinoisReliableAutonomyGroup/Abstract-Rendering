@@ -31,8 +31,8 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DTYPE = torch.float32
     
 def main(setup_dict):
-    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size",  "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max","start_arr", "end_arr", "trans_arr", "bg_pure_color"]
-    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max,start_arr, end_arr, trans_arr, bg_pure_color = (setup_dict[key] for key in key_list)
+    key_list = ["bound_method", "render_method", "width", "height", "f", "tile_size",  "partition_per_dim", "selection_per_dim", "scene_path", "checkpoint_filename", "bg_img_path", "save_folder", "save_ref", "save_bound", "domain_type", "N_samples", "input_min", "input_max","start_arr", "end_arr", "trans_arr", "bg_pure_color","target_roll"]
+    bound_method, render_method, width, height, f, tile_size,  partition_per_dim, selection_per_dim, scene_path, checkpoint_filename, bg_img_path, save_folder, save_ref, save_bound, domain_type, N_samples, input_min, input_max,start_arr, end_arr, trans_arr, bg_pure_color,target_roll = (setup_dict[key] for key in key_list)
     
     # Load Already Trained Scene Files
     script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -95,12 +95,12 @@ def main(setup_dict):
     
     # Generate Rotation Matrix
     
-    rot = dir_to_rpy_and_rot(start_arr, end_arr)
+    rot = dir_to_rpy_and_rot(start_arr, end_arr, target_roll)
     rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
-    trans = trans_arr
+    trans = torch.from_numpy(trans_arr).to(device=DEVICE, dtype=DTYPE)
     # trans = np.array([-np.cos(np.deg2rad(20)), np.sin(np.deg2rad(20)), 0.0])*6
     # trans = torch.from_numpy(trans_arr).to(device=DEVICE, dtype=DTYPE)
-    # print("rot:",rot)
+    print("rot:",rot)
     # print(trans)
 
     input_ref = (input_min + input_max)/2
@@ -124,7 +124,7 @@ def main(setup_dict):
 
         img_ref = np.zeros((height, width,3))
 
-        rot = convert_input_to_rot(input_ref, trans, domain_type)
+        rot = convert_input_to_rot(input_ref, trans, domain_type,target_roll)
         rot = torch.from_numpy(rot).to(dtype=DTYPE, device=DEVICE)
 
         render_net = GsplatRGBOrigin(camera_dict, scene_dict_all, bg_color).to(DEVICE)
@@ -156,11 +156,13 @@ def main(setup_dict):
                 
 
         if save_ref:
-            print(img_ref.min(), img_ref.max())
+            #print(img_ref.min(), img_ref.max())
             # print(img_ref[:3,:3,:])
             img_ref= (img_ref.clip(min=0.0, max=1.0)*255).astype(np.uint8)
             res_ref = Image.fromarray(img_ref)
-            res_ref.save(f'{save_folder_full}/ref_{absimg_num}.png')
+            res_ref.save(f'{save_folder_full}/ref_{absimg_num:06d}.png')
+            print(f'{save_folder_full}/ref_{absimg_num:06d}.png')
+  
 
         absimg_num+=1
 
@@ -186,7 +188,7 @@ if __name__=='__main__':
     parser.add_argument("--f", type=int, default=320, help="Focal length.")
     parser.add_argument("--tile_size", type=int, default=64, help="Tile size for rendering.")
     parser.add_argument("--partition_per_dim", type=int, default=20000, help="Partition per dimension.")
-    parser.add_argument("--selection_per_dim", type=int, default=200, help="Selection per dimension.")
+    parser.add_argument("--selection_per_dim", type=int, default=100, help="Selection per dimension.")
     
     parser.add_argument("--data_time", type=str, default="2025-08-02_025446", help="Reconstruction Time.")
     parser.add_argument("--checkpoint_filename", type=str, default="step-000299999.ckpt", help="Checkpoint filename.")
@@ -211,6 +213,16 @@ if __name__=='__main__':
     scene_path = f"outputs/{args.object_name}/{render_method_nerfstudio}/{args.data_time}"
     save_folder = f"../Outputs/RenderedImages/{args.object_name}/{args.domain_type}"
 
+
+    if args.object_name == "airplane_grey":
+        target_roll = 0.0
+    elif args.object_name == "chair":
+        target_roll = -70.55
+    elif args.object_name == "dozer":
+        target_roll = 74.55
+    elif args.object_name == "garden":
+        target_roll = 0.0
+
     setup_dict = {
         "bound_method": args.bound_method,
         "render_method": args.render_method,
@@ -234,6 +246,7 @@ if __name__=='__main__':
         "end_arr": np.array(args.end_arr),
         "trans_arr": np.array(args.trans_arr),
         "bg_pure_color": args.bg_pure_color,
+        "target_roll": target_roll,
     }
 
     start_time = time.time()
