@@ -33,7 +33,8 @@ def run(cmd, desc: str):
 def run_resnet_verification():
     cmd = [
         sys.executable,
-        os.path.join(ROOT, "scripts", "verify_resnet_from_abstract.py"),
+        os.path.join(ROOT, "scripts", "verify_nn_from_abstract.py"),
+        "resnet",
         "--abstract-dir", ABSTRACT_DIR,
         "--model-name", "resnet4b",
         "--ckpt", RESNET_CKPT,
@@ -45,7 +46,8 @@ def run_resnet_verification():
 def run_yolo_verification():
     cmd = [
         sys.executable,
-        os.path.join(ROOT, "scripts", "verify_yolo_from_abstract.py"),
+        os.path.join(ROOT, "scripts", "verify_nn_from_abstract.py"),
+        "yolo",
         "--abstract-dir", ABSTRACT_DIR,
         "--onnx", YOLO_ONNX,
         "--img-size", "52",      # matches ONNXYOLOModel(input_size=52)
@@ -58,7 +60,8 @@ def run_yolo_verification():
 def run_gatenet_verification():
     cmd = [
         sys.executable,
-        os.path.join(ROOT, "scripts", "verify_gatenet_from_abstract.py"),
+        os.path.join(ROOT, "scripts", "verify_nn_from_abstract.py"),
+        "gatenet",
         "--abstract-dir", ABSTRACT_DIR,
         "--ckpt", GATENET_CKPT,
         "--img-size", "64",      # matches GateNet config

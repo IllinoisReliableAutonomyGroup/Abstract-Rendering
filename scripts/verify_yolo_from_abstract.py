@@ -1,44 +1,24 @@
 import argparse
+import os
+import sys
 from pathlib import Path
 
-import os,sys
-
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
-sys.path.append(grandfather_path)
+if grandfather_path not in sys.path:
+    sys.path.append(grandfather_path)
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from verify_nn_from_abstract import verify_yolo
 
-import onnx
-import onnx2pytorch
 
-# 🔧 compatibility patch for onnx2pytorch Pad(constant=...)
-import onnx2pytorch.operations.pad as pad_module
-import onnx2pytorch.convert.operations as conv_ops
-
-# Take the original Pad class as a base
-_OrigPad = pad_module.Pad
-
-class CompatPad(_OrigPad):
-    def __init__(self, *args, constant=None, value=None, **kwargs):
-        # Swallow both 'constant' and 'value' kwargs and rely on the default
-        # padding behavior of the original Pad implementation.
-        # This avoids TypeError: unexpected 'constant'/'value' in old versions.
-        super().__init__(*args, **kwargs)
-
-# Patch both the pad module and the convert.operations binding
-pad_module.Pad = CompatPad
-conv_ops.Pad = CompatPad
-# 🔧 end patch
-
-from onnx2pytorch import ConvertModel
-
-from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
-
-from utils import iter_abstract_records
-# Optional: if you want VOC_CLASSES or drawing utils
-from DownStreamModel.yolo import yolo_utils  # not strictly required here
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--abstract-dir", type=str, required=True)
+    parser.add_argument("--onnx", type=str, required=True)
+    parser.add_argument("--img-size", type=int, default=416)
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--max-samples", type=int, default=None)
+    args = parser.parse_args()
+    verify_yolo(args)
 
 
 class TinyYOLOWrapper(nn.Module):

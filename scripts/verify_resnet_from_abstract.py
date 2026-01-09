@@ -1,18 +1,23 @@
 import argparse
+import os
+import sys
 from pathlib import Path
 
-import os,sys
-
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
-sys.path.append(grandfather_path)
+if grandfather_path not in sys.path:
+    sys.path.append(grandfather_path)
 
-import torch
-import torch.nn.functional as F
+from verify_nn_from_abstract import verify_resnet
 
-from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 
-from utils import iter_abstract_records
-from DownStreamModel.cifar10_resnet.resnet import resnet2b, resnet4b
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--abstract-dir", type=str, required=True)
+    parser.add_argument("--model-name", type=str, default="resnet4b", choices=["resnet2b", "resnet4b"]) 
+    parser.add_argument("--ckpt", type=str, required=True)
+    parser.add_argument("--device", type=str, default="cuda")
+    args = parser.parse_args()
+    verify_resnet(args)
 
 
 # CIFAR-10 statistics used by the ResNet models

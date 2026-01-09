@@ -1,0 +1,45 @@
+# Conda environment for reproducible verification runs using auto_LiRPA
+# Created to reproduce the `abstractgs-lirpa` environment used for smoke-tests.
+# Usage:
+#   conda env create -f environment-abstractgs-lirpa.yml
+#   conda activate abstractgs-lirpa
+# Notes:
+# - PyTorch CPU 1.12.x + torchvision 0.13.x are installed via the official PyTorch CPU wheel.
+# - If you have a CUDA GPU and want GPU-enabled PyTorch, install a matching CUDA wheel per https://pytorch.org/get-started/locally
+# - auto_LiRPA requires older PyTorch (<1.13), so this environment pins torch to 1.12.x.
+
+name: abstractgs-lirpa
+channels:
+  - pytorch
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - typing_extensions
+  - pip:
+    # PyTorch CPU wheels (official PyTorch index)
+    - torch==1.12.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+    - torchvision==0.13.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+
+    # Core verification and conversion packages
+    - auto_LiRPA==0.3
+    - onnx==1.20.0
+    - onnx2pytorch==0.5.3
+
+    # Scientific/runtime dependencies (keep versions stable)
+    - numpy==1.25.2
+    - scipy==1.15.3
+    - pillow
+    - requests
+    - tqdm
+
+    # Dev/test tooling
+    - pytest
+    - pylint
+
+# If you prefer, you can create the env from conda and then install the pip packages like this:
+#   conda create -n abstractgs-lirpa python=3.10 pip -y
+#   conda activate abstractgs-lirpa
+#   pip install --no-deps "torch==1.12.1+cpu" "torchvision==0.13.1+cpu" -f https://download.pytorch.org/whl/cpu/torch_stable.html
+#   pip install auto_LiRPA onnx onnx2pytorch numpy==1.25.2 scipy tqdm pillow requests pytest pylint
