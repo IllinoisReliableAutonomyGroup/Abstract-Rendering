@@ -6,6 +6,8 @@ import argparse
 import json
 import base64
 from io import BytesIO
+from scipy.ndimage import gaussian_filter
+from matplotlib import cm
 
 def load_abstract_records(folder_path):
     records = []
@@ -67,6 +69,25 @@ def encode_image_to_base64(image_array):
     image.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+def compute_heatmap(upper, lower, ref):
+    # Compute pixelwise uncertainty
+    diff = np.abs(upper - lower).mean(axis=2)
+    diff = gaussian_filter(diff, sigma=1.0)
+
+    # Normalize to 0..1
+    dmax = np.percentile(diff, 99)
+    diff_norm = np.clip(diff / (dmax if dmax > 0 else 1), 0, 1)
+
+    # Sky color = median of ref
+    sky_color = np.median(ref.reshape(-1, 3), axis=0)
+
+    # Apply colormap (magma), but blend with sky
+    heat_rgb = cm.magma(diff_norm)[..., :3]
+    alpha = diff_norm[..., None]
+    blended = (1 - alpha) * sky_color + alpha * heat_rgb
+
+    return blended
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save interactive visualization for abstract images as JSON.")
     parser.add_argument("--object_name", type=str, default="airplane_grey", help="Name of the object.")
@@ -101,7 +122,7 @@ if __name__ == "__main__":
     perturbation_ranges = torch.linspace(0, perturbation_max.max().item(), steps=10)
 
     # Precompute images for all slider values
-    precomputed_images = {"lower": [], "upper": [], "ref": []}
+    precomputed_images = {"lower": [], "upper": [], "ref": [], "heatmap": []}
     for camera_pose in camera_poses:
         for perturbation_range in perturbation_ranges:
             unified_lower, unified_upper = filter_and_unify_images(records, camera_pose, perturbation_range)
@@ -110,6 +131,7 @@ if __name__ == "__main__":
             precomputed_images["lower"].append(encode_image_to_base64(unified_lower))
             precomputed_images["upper"].append(encode_image_to_base64(unified_upper))
             precomputed_images["ref"].append(encode_image_to_base64(average_ref_image))
+            precomputed_images["heatmap"].append(encode_image_to_base64(compute_heatmap(unified_upper, unified_lower, average_ref_image)))
 
     # Save the interactive plot as a JSON file
     fig_dict = {
