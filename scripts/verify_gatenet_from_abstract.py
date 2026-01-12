@@ -1,23 +1,18 @@
 import argparse
-import os
-import sys
 from pathlib import Path
 
+import torch
+import torch.nn.functional as F
+
+import os,sys
+
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
-if grandfather_path not in sys.path:
-    sys.path.append(grandfather_path)
+sys.path.append(grandfather_path)
 
-from verify_nn_from_abstract import verify_gatenet
+from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--abstract-dir", type=str, required=True)
-    parser.add_argument("--ckpt", type=str, required=True)
-    parser.add_argument("--img-size", type=int, default=64)
-    parser.add_argument("--device", type=str, default="cuda")
-    args = parser.parse_args()
-    verify_gatenet(args)
+from utils import iter_abstract_records
+from DownStreamModel.gatenet.gatenet import GateNet
 
 
 def default_gatenet_config(img_size: int) -> dict:
