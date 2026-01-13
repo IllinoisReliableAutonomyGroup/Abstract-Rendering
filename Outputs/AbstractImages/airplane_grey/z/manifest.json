@@ -1,0 +1,19 @@
+{
+  "object_name": "airplane_grey",
+  "domain_type": "z",
+  "num_poses": 5,
+  "num_perturb": 6,
+  "perturb_folders": [
+    "perturb_0",
+    "perturb_1",
+    "perturb_2",
+    "perturb_3",
+    "perturb_4",
+    "perturb_5"
+  ],
+  "pattern": {
+    "ref": "ref_{pose}.png",
+    "lb": "lb_{pose}.png",
+    "ub": "ub_{pose}.png"
+  }
+}

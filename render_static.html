@@ -25,6 +25,10 @@
                     <h3>Upper Bound</h3>
                     <img id="img-upper-1" src="" alt="Upper Bound">
                 </div>
+                <div>
+                    <h3>Uncertainty Map</h3>
+                    <img id="img-heatmap-1" src="" alt="Heatmap">
+                </div>
             </div>
             <div class="slider-container">
                 <label class="slider-label" for="slider-pose-1">Camera Pose:</label>
@@ -52,6 +56,10 @@
                 <div>
                     <h3>Upper Bound</h3>
                     <img id="img-upper-2" src="" alt="Upper Bound">
+                </div>
+                <div>
+                    <h3>Uncertainty Map</h3>
+                    <img id="img-heatmap-2" src="" alt="Heatmap">
                 </div>
             </div>
             <div class="slider-container">
@@ -81,6 +89,10 @@
                     <h3>Upper Bound</h3>
                     <img id="img-upper-3" src="" alt="Upper Bound">
                 </div>
+                <div>
+                    <h3>Uncertainty Map</h3>
+                    <img id="img-heatmap-3" src="" alt="Heatmap">
+                </div>
             </div>
             <div class="slider-container">
                 <label class="slider-label" for="slider-pose-3">Camera Pose:</label>
@@ -108,6 +120,10 @@
                 <div>
                     <h3>Upper Bound</h3>
                     <img id="img-upper-4" src="" alt="Upper Bound">
+                </div>
+                <div>
+                    <h3>Uncertainty Map</h3>
+                    <img id="img-heatmap-4" src="" alt="Heatmap">
                 </div>
             </div>
             <div class="slider-container">
@@ -142,6 +158,7 @@
                     const imgLower = document.getElementById(`img-lower-${index + 1}`);
                     const imgRef = document.getElementById(`img-ref-${index + 1}`);
                     const imgUpper = document.getElementById(`img-upper-${index + 1}`);
+                    const imgHeatmap = document.getElementById(`img-heatmap-${index + 1}`);
 
                     const poseValues = data.pose_values;
                     const rangeValues = data.range_values;
@@ -161,6 +178,7 @@
                         imgLower.src = `data:image/png;base64,${data.images.lower[imgIndex]}`;
                         imgRef.src = `data:image/png;base64,${data.images.ref[imgIndex]}`;
                         imgUpper.src = `data:image/png;base64,${data.images.upper[imgIndex]}`;
+                        imgHeatmap.src = `data:image/png;base64,${data.images.heatmap[imgIndex]}`;
                     }
 
                     sliderPose.addEventListener("input", updateImages);
