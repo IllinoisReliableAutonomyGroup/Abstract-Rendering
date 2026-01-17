@@ -34,10 +34,10 @@ def _to_hwc(img):
 
 
 def _load_ref(abstract_dir, idx, shape):
-    """Load ref_{idx}.png or return gray placeholder."""
+    """Load ref_{idx:06d}.png or return gray placeholder."""
     from PIL import Image
 
-    ref_path = os.path.join(abstract_dir, f"ref_{idx}.png")
+    ref_path = os.path.join(abstract_dir, f"ref_{idx:06d}.png")
     h, w, _ = shape
 
     if not os.path.exists(ref_path):
