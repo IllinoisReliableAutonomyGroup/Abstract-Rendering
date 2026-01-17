@@ -37,7 +37,7 @@ bound_opts = {
         'iteration': 100, 
         # 'lr_alpha':0.02, 
         'early_stop_patience':5},
-}, 
+} 
 
 # --- Drop-in: helper to save abstract record (.pt with 8 fields)
 def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, upper_img):
@@ -67,16 +67,17 @@ def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, u
         upper_t = upper_img.to(dtype=torch.float32).detach().cpu()
     # print("lower_intput:", lower_input)
     # print("lower_i:", lower_i)
-    record = {
-        "xl": lower_i,
-        "xu": upper_i,
-        "lower": lower_t,  # (H, W, 3), float32, [0,1]
-        "upper": upper_t,  # (H, W, 3), float32, [0,1]
-        "lA": None,
-        "uA": None,
-        "lb": None,
-        "ub": None,
-    }
+    record = (
+        lower_i,   # xl
+        upper_i,   # xu
+        lower_t,   # lower
+        upper_t,   # upper
+        None,      # lA
+        None,      # uA
+        None,      # lb
+        None,      # ub
+    )
+
 
     out_path = os.path.join(save_dir, f"abstract_{index:06d}.pt")
     torch.save(record, out_path)
@@ -332,8 +333,6 @@ def main(setup_dict):
                 upper_input=input_ub,
                 lower_img=img_lb_f,
                 upper_img=img_ub_f,
-                x_l=x_l,
-                x_u=x_u,
             )
 
         absimg_num+=1
