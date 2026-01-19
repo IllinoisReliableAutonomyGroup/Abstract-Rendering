@@ -37,15 +37,13 @@ bound_opts = {
         'iteration': 100, 
         # 'lr_alpha':0.02, 
         'early_stop_patience':5},
-}, 
+} 
 
 # --- Drop-in: helper to save abstract record (.pt with 8 fields)
 def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, upper_img):
     """
     Save an abstract image record with required fields:
       lower, upper, lA, uA, lb, ub, xl, xu
-    Currently only lower/upper are populated; others are left None.
-    lower_img / upper_img are expected as arrays/tensors in [0,1] with shape (H,W,3).
     """
 
     if isinstance(lower_input, np.ndarray):
@@ -59,26 +57,28 @@ def save_abstract_record(save_dir, index, lower_input, upper_input, lower_img, u
         upper_i = upper_input.to(dtype=torch.float32).detach().cpu()
 
     if isinstance(lower_img, np.ndarray):
-        lower_t = torch.from_numpy(lower_img.astype(np.float32, copy=False))
+        lower_t = torch.from_numpy(lower_img.astype(np.float32))
     else:
-        lower_t = lower_img.to(dtype=torch.float32).detach().cpu()
+        lower_t = lower_img.to(dtype=torch.float32).cpu()
 
     if isinstance(upper_img, np.ndarray):
-        upper_t = torch.from_numpy(upper_img.astype(np.float32, copy=False))
+        upper_t = torch.from_numpy(upper_img.astype(np.float32))
     else:
         upper_t = upper_img.to(dtype=torch.float32).detach().cpu()
     # print("lower_intput:", lower_input)
     # print("lower_i:", lower_i)
-    record = {
-        "xl": lower_i,
-        "xu": upper_i,
-        "lower": lower_t,  # (H, W, 3), float32, [0,1]
-        "upper": upper_t,  # (H, W, 3), float32, [0,1]
-        "lA": None,
-        "uA": None,
-        "lb": None,
-        "ub": None,
-    }
+    record = (
+        lower_i,   # xl
+        upper_i,   # xu
+        lower_t,   # lower
+        upper_t,   # upper
+        None,      # lA
+        None,      # uA
+        None,      # lb
+        None,      # ub
+    )
+
+
     out_path = os.path.join(save_dir, f"abstract_{index:06d}.pt")
     torch.save(record, out_path)
     return out_path
