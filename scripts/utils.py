@@ -16,15 +16,40 @@ def load_abstract_record(path: Union[str, Path]) -> Dict[str, Any]:
     Load a saved abstract image record (.pt) and return a dict with keys:
       lower, upper, lA, uA, lb, ub, xl, xu
 
+    This function handles both formats:
+    - Old format: dict with keys
+    - New format: tuple (xl, xu, lower, upper, lA, uA, lb, ub)
+
     This matches the format produced by abstract_gsplat.py.
     """
     path = Path(path)
     rec = torch.load(path, map_location="cpu")
 
-    required_keys = ["lower", "upper", "lA", "uA", "lb", "ub", "xl", "xu"]
-    for k in required_keys:
-        if k not in rec:
-            raise KeyError(f"Missing key '{k}' in abstract record {path}: {k}")
+    # Handle new tuple format: (xl, xu, lower, upper, lA, uA, lb, ub)
+    if isinstance(rec, tuple):
+        if len(rec) != 8:
+            raise ValueError(f"Tuple format record in {path} must have 8 elements, got {len(rec)}")
+
+        # Convert tuple to dict for backward compatibility
+        rec = {
+            "xl": rec[0],
+            "xu": rec[1],
+            "lower": rec[2],
+            "upper": rec[3],
+            "lA": rec[4],
+            "uA": rec[5],
+            "lb": rec[6],
+            "ub": rec[7],
+        }
+
+    # Handle old dict format - validate it has all required keys
+    elif isinstance(rec, dict):
+        required_keys = ["lower", "upper", "lA", "uA", "lb", "ub", "xl", "xu"]
+        for k in required_keys:
+            if k not in rec:
+                raise KeyError(f"Missing key '{k}' in abstract record {path}")
+    else:
+        raise TypeError(f"Abstract record in {path} must be either dict or tuple, got {type(rec)}")
 
     return rec
 
