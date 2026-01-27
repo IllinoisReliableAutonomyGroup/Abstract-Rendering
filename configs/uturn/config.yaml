@@ -1,0 +1,34 @@
+bound_method: "forward"
+render_method: "splatfacto"
+object_name: "uturn"
+odd_type: "cylinder"
+save_filename: null
+
+# width: 128
+# height: 128
+# fx: 108
+# fy: 108
+# eps2d: 4.0
+width: 64
+height: 64
+fx: 54
+fy: 54
+eps2d: 2.0
+tile_size_abstract: 16
+tile_size_render: 24
+min_distance: 0.01
+max_distance: 10000.0
+gs_batch: 120
+part: [1,1,4]
+
+data_time: "2025-05-09_151825"
+checkpoint_filename: "step-000040005.ckpt"
+
+bg_img_path: null
+bg_pure_color: [1.0, 1.0, 1.0]
+
+save_ref: true
+save_bound: true
+N_samples: 10
+
+
