@@ -106,9 +106,9 @@ def visualize(abstract_dir, idx=0, out=None):
     # Final panel
     panel = np.zeros((2*h, 2*w, 3), dtype=np.float32)
     panel[0:h, 0:w] = ref
-    panel[0:h, w:2*w] = lower
-    panel[h:2*h, 0:w] = upper
-    panel[h:2*h, w:2*w] = blended
+    panel[0:h, w:2*w] = blended
+    panel[h:2*h, 0:w] = lower
+    panel[h:2*h, w:2*w] = upper
 
     # Save
     fig, ax = plt.subplots(figsize=(8, 8))
