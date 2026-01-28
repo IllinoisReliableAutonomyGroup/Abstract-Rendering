@@ -254,7 +254,7 @@ def main(setup_dict):
 
         while inputs_queue:
             input_center_org, input_lb_org, input_ub_org = inputs_queue.popleft() # [N, ]
-            input_center, input_lb, input_ub = refine_partition(input_center_org, input_lb_org, input_ub_org, odd_type) 
+            input_center, input_lb, input_ub = refine_partition(input_center_org.clone(), input_lb_org.clone(), input_ub_org.clone(), odd_type) 
             input_center, input_lb, input_ub = input_center.unsqueeze(0), input_lb.unsqueeze(0), input_ub.unsqueeze(0) #[1, N]
             verf_net.call_model_preprocess("sort_gauss", input_center)
 
@@ -335,7 +335,7 @@ def main(setup_dict):
     return 0
 
 if __name__ == '__main__':
-    ### Default command: python3 scripts/abstract_gsplat.py --config configs/uturn/config.yaml --odd configs/uturn/traj.json
+    ### Default command: python3 scripts/abstract_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
     parser = argparse.ArgumentParser(description="Abstract Gsplat with YAML configuration.")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
     parser.add_argument("--odd", type=str, required=True, help="Path to the YAML configuration file.")

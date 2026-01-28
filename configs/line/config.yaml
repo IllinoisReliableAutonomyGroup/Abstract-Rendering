@@ -2,7 +2,7 @@ bound_method: "forward"
 render_method: "splatfacto"
 object_name: "line"
 odd_type: "cylinder"
-save_filename: "traj"
+save_filename: "samples"
 
 # width: 256
 # height: 256

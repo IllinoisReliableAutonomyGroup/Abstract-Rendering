@@ -347,7 +347,7 @@ class GsplatRGB(nn.Module):
 
         # Filter Too small Alpha
         idx1, idx2, idx3 =50, 200, 1000
-        mask = (alpha_max>0.0001) 
+        mask = (alpha_max>0.01) 
         # mask[idx1:] = mask[idx1:] & (alpha_max[idx1:] > 0.1) 
         # mask[idx2:] = mask[idx2:] & (alpha_max[idx2:] > 0.15) 
         # mask[idx3:] = mask[idx3:] & (alpha_max[idx3:] > 0.2) 
@@ -375,7 +375,7 @@ class GsplatRGB(nn.Module):
                 name: attr[mask][:N]
                 for name, attr in self.scene_dict_sorted.items()
             }
-            #print(f"Tile {hl,wl,hu,wu} Contains {N} Gaussians.")
+            print(f"Tile {hl,wl,hu,wu} Contains {N} Gaussians.")
 
         # Generate Up Triangel Matrix
         self.triu_mask = torch.triu(torch.ones(N+2, N+2), diagonal=1)
@@ -475,7 +475,7 @@ class GsplatRGB(nn.Module):
 
         # Avoid too large Gaussians in pixel space by clamping per-depth size
         max_allowed = self.eps2d * depth              # [1, N]
-        Ms_pix_abs = (torch.relu(Ms_pix) + torch.relu(-Ms_pix))/2 # [1, N, 2, 2]
+        Ms_pix_abs = torch.relu(Ms_pix) + torch.relu(-Ms_pix) # [1, N, 2, 2]
         Ms_pix_abs += 1e-8
         Ms_pix_abs_inv = 1.0 / Ms_pix_abs
         scale_factor = torch.minimum(torch.ones_like(Ms_pix_abs), max_allowed[:, :, None, None]*Ms_pix_abs_inv)  # [1, N]
@@ -524,7 +524,7 @@ class GsplatRGB(nn.Module):
         # prob_density = pix_diff_0**2*conics_pix_00[:, None, None, :]+2*pix_diff_0*pix_diff_1*conics_pix_01[:, None, None, :]+pix_diff_1**2*conics_pix_11[:, None, None, :] #[1, TH, TW, N]
         #prob_density = 1/covs_pix_det[:, None, None, :]*(pix_diff_0**2*covs_pix_11[:, None, None, :]-2*pix_diff_0*pix_diff_1*covs_pix_01[:, None, None, :]+pix_diff_1**2*covs_pix_00[:, None, None, :]) #[1, TH, TW, N]
         
-        prob_density = 1/(covs_pix_det[:, None, None, :]+1e-10)*(\
+        prob_density = 1/(covs_pix_det[:, None, None, :])*(\
         (pix_diff_0*Ms_pix_10[:, None, None, :]-pix_diff_1*Ms_pix_00[:, None, None, :])**2+\
         (pix_diff_0*Ms_pix_11[:, None, None, :]-pix_diff_1*Ms_pix_01[:, None, None, :])**2+\
         (pix_diff_0*Ms_pix_12[:, None, None, :]-pix_diff_1*Ms_pix_02[:, None, None, :])**2) #[1, TH, TW, N]

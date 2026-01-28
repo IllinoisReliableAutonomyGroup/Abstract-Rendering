@@ -2,7 +2,7 @@ bound_method: "forward"
 render_method: "splatfacto"
 object_name: "uturn"
 odd_type: "cylinder"
-save_filename: "traj"
+save_filename: "samples"
 
 # width: 256
 # height: 256
@@ -35,5 +35,6 @@ bg_pure_color: [1.0, 1.0, 1.0]
 save_ref: true
 save_bound: true
 N_samples: 5
+
 
 

@@ -93,8 +93,7 @@ def orthogonal_basis_from_direction(direction, eps=1e-8):
         orthogonal1 = torch.linalg.cross(direction, x_axis)
         orthogonal1 = orthogonal1 / (torch.norm(orthogonal1) + eps)
 
-    orthogonal2 = torch.cross(direction, orthogonal1)
-
+    orthogonal2 = torch.linalg.cross(direction, orthogonal1)
     return direction, orthogonal1, orthogonal2
 
 def input_to_trans(input, base_trans, type, direction=None, radius=None):

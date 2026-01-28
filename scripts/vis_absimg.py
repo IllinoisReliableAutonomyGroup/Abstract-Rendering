@@ -55,6 +55,21 @@ def _load_ref(abstract_dir, idx, shape):
     return np.clip(ref, 0, 1)
 
 
+def visualize_all(abstract_dir, out=None):
+    """
+    Visualize all available indices in the given folder.
+    """
+    # Find all abstract records in the folder
+    abstract_files = [
+        f for f in os.listdir(abstract_dir) if f.startswith("abstract_") and f.endswith(".pt")
+    ]
+    indices = sorted(int(f.split("_")[1].split(".")[0]) for f in abstract_files)
+
+    # Visualize each index
+    for idx in indices:
+        visualize(abstract_dir, idx, out)
+
+
 def visualize(abstract_dir, idx=0, out=None):
     """
     Create a 2x2 panel:
@@ -111,7 +126,7 @@ def visualize(abstract_dir, idx=0, out=None):
 
 
 if __name__ == "__main__":
-    ### default command: python3 scripts/vis_absimg.py --config configs/uturn/vis_absimg.yaml
+    ### default command: python3 scripts/vis_absimg.py --config configs/${case_name}/vis_absimg.yaml
     parser = argparse.ArgumentParser(description="Visualize abstract images with YAML configuration.")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
     args = parser.parse_args()
@@ -121,7 +136,12 @@ if __name__ == "__main__":
         config = yaml.safe_load(file)
 
     abstract_dir = config["abstract_dir"]
-    index = config["index"]
+    index = config.get("index", None)
     out = config.get("out", None)
 
-    visualize(abstract_dir, index, out)
+    print(f"index: {index}")
+
+    if index is None:
+        visualize_all(abstract_dir, out)
+    else:
+        visualize(abstract_dir, index, out)

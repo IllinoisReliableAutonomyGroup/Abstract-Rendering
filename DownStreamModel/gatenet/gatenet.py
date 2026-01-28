@@ -26,9 +26,9 @@ class GateNet(nn.Module):
 
         self.flatten = nn.Flatten()
 
-        print(config['input_shape'])
+        # print(config['input_shape'])
         res = self.conv(torch.zeros(config['input_shape'])[None])
-        print(res.shape[1])
+        # print(res.shape[1])
         self.fc = nn.Linear(res.shape[1], int(torch.prod(torch.tensor(config['output_shape']))))
 
     def conv(self, x):

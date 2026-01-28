@@ -164,7 +164,7 @@ def main(setup_dict):
     return 0
 
 if __name__=='__main__':
-    ### default command: python3 scripts/render_gsplat.py --config configs/uturn/config.yaml --odd configs/uturn/traj.json
+    ### default command: python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
     parser = argparse.ArgumentParser(description="Render Gsplat with YAML configuration.")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
     parser.add_argument("--odd", type=str, required=True, help="Path to the JSON configuration file.")

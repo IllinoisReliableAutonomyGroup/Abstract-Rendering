@@ -56,10 +56,11 @@ def generate_partition(odd_type, part=None):
 
         return centers, lower_bounds, upper_bounds
     
-def refine_partition(input_center, input_lb, input_ub, odd_type, part=10000):
+def refine_partition(input_center, input_lb, input_ub, odd_type, part=100):
 
     eps = 1e-8
     assert input_center.shape == input_lb.shape == input_ub.shape
+    # print(f"input_lb: {input_lb}, input_ub: {input_ub}, input_center: {input_center}")
     assert torch.all(input_lb <= input_center+eps )
     assert torch.all(input_ub >= input_center-eps)
 
@@ -69,7 +70,7 @@ def refine_partition(input_center, input_lb, input_ub, odd_type, part=10000):
         delta_lb = input_center - input_lb
         delta_ub = input_ub - input_center
 
-        input_center[..., :2] = input_center[..., :2]/100
+        input_center[:2] = input_center[:2]/100
         delta_lb, delta_ub = delta_lb/part, delta_ub/part
         input_lb = input_center - delta_lb
         input_ub = input_center + delta_ub
@@ -80,9 +81,24 @@ def refine_partition(input_center, input_lb, input_ub, odd_type, part=10000):
 
 
 if __name__ == '__main__':
+    from collections import deque
     odd_type = "cylinder"
-    part = [1,5,10]
-    
-    centers, lower_bounds, upper_bounds = generate_partition(odd_type, part)
-    print(lower_bounds.shape, upper_bounds.shape, centers.shape)
-    # print(centers, lower_bounds, upper_bounds)
+    part = [1, 2, 5]
+
+    inputs_center, inputs_lb, inputs_ub = generate_partition(odd_type, part)  # [part, N]
+    inputs_center, inputs_lb, inputs_ub = (
+        torch.tensor(inputs_center).to(device=DEVICE, dtype=DTYPE),
+        torch.tensor(inputs_lb).to(device=DEVICE, dtype=DTYPE),
+        torch.tensor(inputs_ub).to(device=DEVICE, dtype=DTYPE),
+    )
+
+    for i in range(10):
+        inputs_queue = deque(zip(inputs_center, inputs_lb, inputs_ub))
+        while inputs_queue:
+            # Clone tensors to avoid in-place modification
+            input_center_org, input_lb_org, input_ub_org = (
+                inputs_queue.popleft()
+            )
+            input_center, input_lb, input_ub = refine_partition(
+                input_center_org.clone(), input_lb_org.clone(), input_ub_org.clone(), odd_type
+            )

@@ -1,0 +1,12 @@
+case_name: "uturn"
+nn_type: "gatenet"
+bound_method: "backward"
+render_method: "splatfacto"
+img_folder: "samples"
+odd_type: "cylinder"
+
+width: 64
+height: 64
+
+debug: True
+threshold: [120.0, 150.0, 90.0]

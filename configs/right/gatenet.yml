@@ -1,0 +1,12 @@
+case_name: "right"
+nn_type: "gatenet"
+bound_method: "backward"
+render_method: "splatfacto"
+img_folder: "samples"
+odd_type: "cylinder"
+
+width: 64
+height: 64
+
+debug: True
+threshold: [170.0, 160.0, 110.0]
