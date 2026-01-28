@@ -113,7 +113,7 @@ class GsplatRGBOrigin(nn.Module):
         }
 
         N_masked = mask.sum().item()
-        print(f"Contains {N_masked} Gaussians.")
+        # print(f"Contains {N_masked} Gaussians.")
 
 
     def get_num(self):
@@ -375,7 +375,7 @@ class GsplatRGB(nn.Module):
                 name: attr[mask][:N]
                 for name, attr in self.scene_dict_sorted.items()
             }
-            print(f"Tile {hl,wl,hu,wu} Contains {N} Gaussians.")
+            #print(f"Tile {hl,wl,hu,wu} Contains {N} Gaussians.")
 
         # Generate Up Triangel Matrix
         self.triu_mask = torch.triu(torch.ones(N+2, N+2), diagonal=1)

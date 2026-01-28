@@ -56,7 +56,7 @@ def generate_partition(odd_type, part=None):
 
         return centers, lower_bounds, upper_bounds
     
-def refine_partition(input_center, input_lb, input_ub, odd_type, part=100):
+def refine_partition(input_center, input_lb, input_ub, odd_type, part=2000):
 
     eps = 1e-8
     assert input_center.shape == input_lb.shape == input_ub.shape

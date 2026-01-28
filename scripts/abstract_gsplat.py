@@ -270,7 +270,7 @@ def main(setup_dict):
                 for h in range(0, height, tile_size) for w in range(0, width, tile_size) 
             ] 
 
-            pbar3 = tqdm(total=len(tiles_queue),desc="Processing Tiles", unit="item")
+            pbar3 = tqdm(total=len(tiles_queue),desc="Processing Tiles", unit="item", disable=True)
 
             while tiles_queue!=[]:
                 hl,wl,hu,wu = tiles_queue.pop(0)

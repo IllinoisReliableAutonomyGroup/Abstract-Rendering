@@ -16,25 +16,27 @@ def load_analysis_results(case_name, odd_type, nn_type):
         raise FileNotFoundError(f"Result file not found at {result_path}")
     return torch.load(result_path)
 
-def generate_gate_circle(point, tangent, radius=0.5, num_points=100):
+def generate_gate_circle(point, tangent, outer_radius=0.2, height=0.1, num_points=100, num_slices=5):
     """
-    Generate a 3D circle representing a gate based on its tangent.
+    Generate a hollow cylindrical region representing a gate with multiple circles between the top and bottom surfaces.
 
     Args:
-        x, y, z (float): Center of the gate.
+        point (list): Center of the gate [x, y, z].
         tangent (list): Tangent vector [dx, dy, dz] defining the gate's orientation.
-        radius (float): Radius of the gate.
+        outer_radius (float): Outer radius of the gate.
+        height (float): Height of the cylindrical region.
         num_points (int): Number of points to generate the circle.
+        num_slices (int): Number of slices between the top and bottom surfaces.
 
     Returns:
-        np.ndarray: Points representing the circle.
+        np.ndarray: Points representing the hollow cylindrical region.
     """
-    # Normalize
+    inner_radius = outer_radius * 0.85  # Define inner radius for hollow effect
+    # Normalize tangent
     tangent = tangent / (np.linalg.norm(tangent) + 1e-8)
 
     # Find two orthogonal vectors to the tangent
     if np.allclose(tangent, [1, 0, 0]) or np.allclose(tangent, [-1, 0, 0]):
-        # Special case: tangent is along x-axis
         orthogonal1 = np.array([0, 1, 0])
     else:
         orthogonal1 = np.cross(tangent, [1, 0, 0])
@@ -42,17 +44,30 @@ def generate_gate_circle(point, tangent, radius=0.5, num_points=100):
 
     orthogonal2 = np.cross(tangent, orthogonal1)
 
-    # Generate points for the circle in the plane defined by the tangent
+    # Generate points for the outer and inner circles
     theta = np.linspace(0, 2 * np.pi, num_points)
-    circle_points = (
-        radius * np.outer(np.cos(theta), orthogonal1) +
-        radius * np.outer(np.sin(theta), orthogonal2)
+    outer_circle = (
+        outer_radius * np.outer(np.cos(theta), orthogonal1) +
+        outer_radius * np.outer(np.sin(theta), orthogonal2)
+    )
+    inner_circle = (
+        inner_radius * np.outer(np.cos(theta), orthogonal1) +
+        inner_radius * np.outer(np.sin(theta), orthogonal2)
     )
 
-    # Translate the circle to the gate's position
-    circle_points += np.array(point)
+    # Generate slices between the top and bottom surfaces
+    slice_positions = np.linspace(-height / 2, height / 2, num_slices)
+    hollow_cylinder = []
 
-    return circle_points
+    for z in slice_positions:
+        hollow_cylinder.append(outer_circle + np.array(point) + z * tangent)
+        hollow_cylinder.append(inner_circle + np.array(point) + z * tangent)
+
+    # Combine all slices into a single array
+    hollow_cylinder = np.vstack(hollow_cylinder)
+
+    return hollow_cylinder
+
 
 def plot_filled_cylinder_fast(
     ax, base, direction, radius, xl, xu, color, label=None
@@ -204,31 +219,31 @@ def main(config_path, traj_path):
     # Plot gate poses
     plot_gate_poses(ax, gate_poses, gate_radius=0.5)
 
-    # Set plot labels
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
+    # # Set plot labels
+    # ax.set_xlabel("X")
+    # ax.set_ylabel("Y")
+    # ax.set_zlabel("Z")
 
-    # Ensure equal axis scaling
-    x_limits = ax.get_xlim()
-    y_limits = ax.get_ylim()
-    z_limits = ax.get_zlim()
+    # # Ensure equal axis scaling
+    # x_limits = ax.get_xlim()
+    # y_limits = ax.get_ylim()
+    # z_limits = ax.get_zlim()
 
-    x_range = x_limits[1] - x_limits[0]
-    y_range = y_limits[1] - y_limits[0]
-    z_range = z_limits[1] - z_limits[0]
+    # x_range = x_limits[1] - x_limits[0]
+    # y_range = y_limits[1] - y_limits[0]
+    # z_range = z_limits[1] - z_limits[0]
 
-    max_range = max(x_range, y_range, z_range)
+    # max_range = max(x_range, y_range, z_range)
 
-    x_mid = (x_limits[0] + x_limits[1]) / 2
-    y_mid = (y_limits[0] + y_limits[1]) / 2
-    z_mid = (z_limits[0] + z_limits[1]) / 2
+    # x_mid = (x_limits[0] + x_limits[1]) / 2
+    # y_mid = (y_limits[0] + y_limits[1]) / 2
+    # z_mid = (z_limits[0] + z_limits[1]) / 2
 
-    ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
-    ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
-    ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
+    # ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
+    # ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
+    # ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
 
-    ax.set_box_aspect([1, 1, 1])  # Equal scaling for all axes
+    # ax.set_box_aspect([1, 1, 1])  # Equal scaling for all axes
 
     # Add legend with more saturated colors
     legend_elements = [
