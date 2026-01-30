@@ -9,6 +9,8 @@ import argparse
 
 from utils_rotation import orientation_to_direction
 from utils_transform import orthogonal_basis_from_direction
+from matplotlib import cm
+from matplotlib.colors import LinearSegmentedColormap
 
 def load_analysis_results(case_name, odd_type, nn_type):
     result_path = Path(f"Outputs/Analysis/{case_name}/{odd_type}/{nn_type}_result.pt")
@@ -89,7 +91,7 @@ def plot_filled_cylinder_fast(
 
     # Aggressively reduced resolution
     n_d = 2
-    n_theta = 10
+    n_theta = 20
     n_r = 5
 
     d = np.linspace(d0, d1, n_d)
@@ -107,7 +109,7 @@ def plot_filled_cylinder_fast(
     d_t = torch.from_numpy(d).float()
     theta_t = torch.from_numpy(theta).float()
 
-    alpha = 0.25 / n_r  # keep opacity stable
+    alpha = 0.35 / n_r  # keep opacity stable
 
     for r in r_vals:
         points = (
@@ -161,7 +163,7 @@ def main(config_path, traj_path):
     nn_type = config["nn_type"]
     threshold = np.array(config["threshold"])
     debug = config["debug"]
-
+    show_details = config.get("show_details", False)  # Read the new variable
 
     # Load trajectory data
     with open(traj_path, "r") as f:
@@ -183,6 +185,20 @@ def main(config_path, traj_path):
     out_lb = np.nan_to_num(out_lb, nan=-np.inf)
     out_ub = np.nan_to_num(out_ub, nan=np.inf)
 
+    # Define a custom colormap for cyan to magenta
+    cyan_magenta_cmap = LinearSegmentedColormap.from_list("cyan_magenta_gradient", ["#00FFFF", "#FFFF00"])
+
+    # Compute bounds_diff and its min/max for normalization
+    bounds_diff = out_ub - out_lb
+    if show_details:
+        bounds_diff_norms = np.linalg.norm(bounds_diff, axis=1)
+        bounds_diff_min = np.min(bounds_diff_norms)
+        bounds_diff_max = np.max(bounds_diff_norms)
+
+        # Normalize bounds_diff_norms to [bounds_diff_min / bounds_diff_max, 1]
+        normalized_bounds_diff_min = bounds_diff_min / bounds_diff_max
+        normalized_bounds_diff_max = 1.0
+
     # Create a 3D plot
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -199,65 +215,46 @@ def main(config_path, traj_path):
         coeff_lb = xl[i]
         coeff_ub = xu[i]
 
-        # Determine the color based on the threshold
-        bounds_diff = out_ub[i] - out_lb[i]
-        if np.all(bounds_diff < threshold):
-            color = "green"
-            label = "Success" if not success_label_added else None
-            success_label_added = True
+        # Determine the color based on the threshold or bounds_diff norm
+        if show_details:
+            norm = np.linalg.norm(bounds_diff[i])
+            normalized_value = (norm - bounds_diff_min) / (bounds_diff_max - bounds_diff_min + 1e-8)
+            normalized_value = normalized_bounds_diff_min + normalized_value * (normalized_bounds_diff_max - normalized_bounds_diff_min)
+            color = cyan_magenta_cmap(normalized_value)  # Map to custom cyan-to-magenta colormap
         else:
-            color = "red"
-            label = "Fail" if not failure_label_added else None
-            failure_label_added = True
+            if np.all(bounds_diff[i] < threshold):
+                cololabel = "Success" if not success_label_added else None
+                success_label_added = True
+                color = "green"
+                label = "Success" if not success_label_added else None
+                success_label_added = True
+            else:
+                color = "red"
+                label = "Fail" if not failure_label_added else None
+                failure_label_added = True
 
         if debug:
-            print(f"Point {i}: bounds_diff = {bounds_diff}, color = {color}")
+            print(f"Point {i}: bounds_diff = {bounds_diff[i]}, color = {color}")
 
         # Plot the cylinder
-        plot_filled_cylinder_fast(ax, base, direction, radius, coeff_lb, coeff_ub, color=color, label=label)
+        plot_filled_cylinder_fast(ax, base, direction, radius, coeff_lb, coeff_ub, color=color)
 
     # Plot gate poses
     plot_gate_poses(ax, gate_poses, gate_radius=0.5)
 
-    # # Set plot labels
-    # ax.set_xlabel("X")
-    # ax.set_ylabel("Y")
-    # ax.set_zlabel("Z")
+    # Compress the z-axis to 1/3 of its original range
+    x_limits = ax.get_xlim()
+    y_limits = ax.get_ylim()
+    z_limits = ax.get_zlim()
 
-    # # Ensure equal axis scaling
-    # x_limits = ax.get_xlim()
-    # y_limits = ax.get_ylim()
-    # z_limits = ax.get_zlim()
+    ax.set_box_aspect([1, 1, (z_limits[1] - z_limits[0]) / 3])
 
-    # x_range = x_limits[1] - x_limits[0]
-    # y_range = y_limits[1] - y_limits[0]
-    # z_range = z_limits[1] - z_limits[0]
-
-    # max_range = max(x_range, y_range, z_range)
-
-    # x_mid = (x_limits[0] + x_limits[1]) / 2
-    # y_mid = (y_limits[0] + y_limits[1]) / 2
-    # z_mid = (z_limits[0] + z_limits[1]) / 2
-
-    # ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
-    # ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
-    # ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
-
-    # ax.set_box_aspect([1, 1, 1])  # Equal scaling for all axes
-
-    # Add legend with more saturated colors
-    legend_elements = [
-        Patch(facecolor="blue", edgecolor="blue", label="Gate"),
-        Patch(facecolor="green", edgecolor="green", label="Success"),
-        Patch(facecolor="red", edgecolor="red", label="Fail"),
-    ]
-    ax.legend(handles=legend_elements, loc="upper right")
-
+    # Do not show color bar
     # Save the figure
     output_dir = Path(f"Outputs/Analysis/{case_name}/{odd_type}/")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "certification_visualization.png"
-    plt.savefig(output_file)
+    plt.savefig(output_file, dpi=200, bbox_inches="tight")
     print(f"Figure saved to {output_file}")
 
     plt.show()
