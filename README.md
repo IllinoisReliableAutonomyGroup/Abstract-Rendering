@@ -1,6 +1,8 @@
 # Abstract-Rendering-Toolkit 
-### Chenxi Ji, chenxij2@illinois.edu, 01/30/2026
 
+### Authors: Chenxi Ji\* , Yangge Li\* , Xiangru Zhong\* , Huan Zhang, Sayan Mitra
+
+### Updated: Chenxi Ji, chenxij2@illinois.edu, 01/30/2026
 This repository provides a user-friendly implementation of **Abstract-Rendering**, which computes the set of images that can be rendered from a set of camera poses under a 3D Gaussian Scene, along with downstream applications such as classification, pose estimation, and object detection.
 
 You can find more resources here:  
