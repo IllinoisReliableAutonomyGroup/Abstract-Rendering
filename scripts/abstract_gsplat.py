@@ -22,7 +22,7 @@ from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 from collections import defaultdict
 
 from scripts.utils_partition import generate_partition, refine_partition
-from scrips.utils_alpha_blending import alpha_blending_ref, alpha_blending_ptb
+from scripts.utils_alpha_blending import alpha_blending_ref, alpha_blending_ptb
 from scripts.utils_save import save_abstract_record
 from render_models import GsplatRGB, TransferModel
 

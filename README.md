@@ -66,7 +66,7 @@ You can use the command below to render images from a specified set of waypoints
 ```bash
 cd ~/Abstract-Rendering
 export case_name=circle
-python3 python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
+python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
 ```
 
 The rendered image (`ref_######.png`) will be saved under `~/Abstract-Rendering/Outputs/RenderedIamges/${case_name}/${odd_type}`, for example:
