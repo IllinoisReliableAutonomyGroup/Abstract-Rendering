@@ -126,14 +126,25 @@ violations; blue indicates gates.
 
 ## Scripts (to be done)
 `render_gsplat.py`:
+- Runs the concrete rendering pipeline for a trained Nerfstudio scene.
+- For each waypoint in a trajectory, builds the corresponding camera pose, projects all Gaussians onto the image, and produces a standard RGB image at that point.
 
-`abstract_gsplat`:
+`abstract_gsplat.py`:
+- Runs the abstract rendering pipeline over the waypoints along a trajectory.
+- For each line segment between two consecutive waypoints, treats a small region of camera poses as a set and computes lower/upper bound images from all views from that region.
 
 `render_models.py`:
+- Contains the core Gaussian splatting implementation used by both pipelines.
+- Given camera intrinsics, a camera pose, and a 3D Gaussian scene, it sorts Gaussians along the viewing direction, projects them to the image plane, and combines their contributions per pixel.
 
 `utils_transform.py`:
+- Handles all camera and scene coordinate conversions.
+- Builds view matrices from translations and rotations, applies the Nerfstudio world transform and scale, and converts camera‑to‑world transforms into the world‑to‑camera form.
+- Also provides the cylindrical pose representation used to describe paths and pose cells in abstract rendering.
 
 `utils_alpha_blending.py`:
+- Implements the volume‑rendering step for Gaussian splats.
+- For each gaussian, combines opacity and color contributions for each pixel ray using a cumulative product, and extends the same logic to lower/upper bounds in the abstract setting.
 
 
 
