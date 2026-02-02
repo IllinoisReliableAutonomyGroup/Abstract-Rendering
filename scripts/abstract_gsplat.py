@@ -73,7 +73,7 @@ def main(setup_dict):
         os.makedirs(save_folder_full)
 
     # Load Trained 3DGS 
-    scene_parameters = torch.load(checkpoint_file)
+    scene_parameters = torch.load(checkpoint_file, weights_only=False)
     means = scene_parameters['pipeline']['_model.gauss_params.means'].to(DEVICE)
     quats = scene_parameters['pipeline']['_model.gauss_params.quats'].to(DEVICE)
     opacities = torch.sigmoid(scene_parameters['pipeline']['_model.gauss_params.opacities']).to(DEVICE)
