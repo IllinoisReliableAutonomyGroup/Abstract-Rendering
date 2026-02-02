@@ -14,7 +14,7 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 ## Workflow
-![](figures/block.png)
+![](figures/block_backup.png)
 
 
 ## Setup
