@@ -58,6 +58,24 @@ You may either use your existing Nerfstudio data or download the pre-reconstruct
 Below is visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
+### 4. (Optional) Run via Docker
+
+This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, auto_LiRPA, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
+
+- **Prerequisites**: Docker installed on your machine, plus the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
+- **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
+  ```bash
+  cd ~/Abstract-Rendering
+  docker build -t abstract-rendering:latest .
+  ```
+- **Start a container**: Run a container from that image, mounting this repository into the container and enabling GPU access so that the container can see your Nerfstudio scenes and output directories:
+  ```bash
+  docker run --gpus all -it --rm \
+    -v ~/Abstract-Rendering:/workspace/Abstract-Rendering \
+    abstract-rendering:latest
+  ```
+- **Inside the container**: The working directory will contain this repository, and all necessary libraries are already installed. You can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
+
 ## Examples
 
 **Note**: The default GPU memory is 16GB. If you machine has less, please reduce the value of `gs_batch` in `config.yaml`.
