@@ -14,7 +14,7 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 ## Workflow
-![](figures/block.png)
+![](figures/block_backup.png)
 
 
 ## Setup
@@ -41,7 +41,7 @@ git clone --branch master https://github.com/IllinoisReliableAutonomyGroup/Abstr
 Install the neural network verification library *auto_LiRPA*, and symbolic link it under the Abstract-Rendering dictionary.
 ```bash
 cd ~
-git clone --branch van_verify_fix_six https://github.com/Verified-Intelligence/auto_LiRPA.git
+git clone --branch master https://github.com/Verified-Intelligence/auto_LiRPA.git
 cd ~/Abstract-Rendering
 cd ln -s ~/Verified-Intelligence/auto_LiRPA auto_LiRPA
 ```
@@ -49,7 +49,7 @@ cd ln -s ~/Verified-Intelligence/auto_LiRPA auto_LiRPA
 
 
 ### 3. (Optional) Download Scene Data
-You may either use your existing Nerfstudio data or download the pre-reconstructed [Nerfstudio scenes](*https://drive.google.com/drive/folders/1koY1TL30Bty2x0U6VpszKRgMXk61oTkG?usp=drive_link*) and place them in the below dictionary structure.
+You may either use your existing Nerfstudio data or download the pre-reconstructed [Nerfstudio scenes](https://drive.google.com/drive/folders/1koY1TL30Bty2x0U6VpszKRgMXk61oTkG?usp=drive_link) and place them in the below dictionary structure.
 
 ```bash
 ~/Abstract-Rendering/nerfstudio/outputs/${case_name}/${reconstruction_method}/${datatime}/...
@@ -86,7 +86,7 @@ You can use the command below to render images from a specified set of waypoints
 ```bash
 cd ~/Abstract-Rendering
 export case_name=circle
-python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
+python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/samples.json
 ```
 
 The rendered image (`ref_######.png`) will be saved under `~/Abstract-Rendering/Outputs/RenderedIamges/${case_name}/${odd_type}`, for example:
