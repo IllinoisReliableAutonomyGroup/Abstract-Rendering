@@ -58,6 +58,24 @@ You may either use your existing Nerfstudio data or download the pre-reconstruct
 Below is visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
+### 4. (Optional) Run via Docker
+
+This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, auto_LiRPA, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
+
+- **Prerequisites**: Docker installed on your machine, plus the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
+- **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
+  ```bash
+  cd ~/Abstract-Rendering
+  docker build -t abstract-rendering:latest .
+  ```
+- **Start a container**: Run a container from that image, mounting this repository into the container and enabling GPU access so that the container can see your Nerfstudio scenes and output directories:
+  ```bash
+  docker run --gpus all -it --rm \
+    -v ~/Abstract-Rendering:/workspace/Abstract-Rendering \
+    abstract-rendering:latest
+  ```
+- **Inside the container**: The working directory will contain this repository, and all necessary libraries are already installed. You can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
+
 ## Examples
 
 **Note**: The default GPU memory is 16GB. If you machine has less, please reduce the value of `gs_batch` in `config.yaml`.
@@ -119,21 +137,29 @@ python3 scripts/plot_gatenet.py --config configs/${case_name}/gatenet.yml --traj
 ```
 
 The visualization of Gatenet Verification is like:
+
 ![](figures/result_circle.png)
 
 where green indicates certified regions; red denotes potential
 violations; blue indicates gates.
 
-## Scripts (to be done)
+## Scripts
 `render_gsplat.py`:
 
 `abstract_gsplat`:
 
 `render_models.py`:
 
-`utils_transform.py`:
+`utils_transform.py`: 
+- Handles all camera and scene coordinate conversions.
+- Builds view matrices from translations and rotations, applies the Nerfstudio world transform and scale, and converts camera‑to‑world transforms into the world‑to‑camera form.
+- Also provides the cylindrical pose representation used to describe paths and pose cells in abstract rendering.
+
 
 `utils_alpha_blending.py`:
+
+- Implements the volume‑rendering step for Gaussian splats.
+- For each gaussian, combines opacity and color contributions for each pixel ray using a cumulative product, and extends the same logic to lower/upper bounds in the abstract setting.
 
 
 
