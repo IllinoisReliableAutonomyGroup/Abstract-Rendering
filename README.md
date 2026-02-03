@@ -43,9 +43,9 @@ Install the neural network verification library *auto_LiRPA*, and symbolic link 
 cd ~
 git clone --branch master https://github.com/Verified-Intelligence/auto_LiRPA.git
 cd ~/Abstract-Rendering
-cd ln -s ~/Verified-Intelligence/auto_LiRPA auto_LiRPA
+cd ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
 ```
-**Note**: This is a hosted in granted by Prof. Huan Zhang.
+
 
 
 ### 3. (Optional) Download Scene Data
