@@ -43,9 +43,9 @@ Install the neural network verification library *auto_LiRPA*, and symbolic link 
 cd ~
 git clone --branch master https://github.com/Verified-Intelligence/auto_LiRPA.git
 cd ~/Abstract-Rendering
-cd ln -s ~/Verified-Intelligence/auto_LiRPA auto_LiRPA
+cd ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
 ```
-**Note**: This is a hosted in granted by Prof. Huan Zhang.
+
 
 
 ### 3. (Optional) Download Scene Data
@@ -137,12 +137,14 @@ python3 scripts/plot_gatenet.py --config configs/${case_name}/gatenet.yml --traj
 ```
 
 The visualization of Gatenet Verification is like:
+
 ![](figures/result_circle.png)
 
 where green indicates certified regions; red denotes potential
 violations; blue indicates gates.
 
 ## Scripts
+`render_gsplat.py`:
 
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
@@ -187,6 +189,9 @@ violations; blue indicates gates.
   - `traj.yaml` / `traj.json`: trajectory configuration and generated waypoint/pose file.
   - Optional downstream configs such as `gatenet.yml` and `vis_absimg.yaml`.
 - When creating a new case, you should create a new folder under `configs/` (for example `configs/my_case/`) and add a new `config.yaml` and trajectory files there, rather than modifying the existing case folders.
+
+- Implements the volume‑rendering step for Gaussian splats.
+- For each gaussian, combines opacity and color contributions for each pixel ray using a cumulative product, and extends the same logic to lower/upper bounds in the abstract setting.
 
 
 
