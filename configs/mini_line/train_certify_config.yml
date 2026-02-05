@@ -1,0 +1,46 @@
+# ============================================================================
+# Paths
+# ============================================================================
+concrete_samples_json: "configs/mini_line/samples.json"
+concrete_image_root: "Outputs/RenderedImages/mini_line/cylinder"
+abstract_folder: "Outputs/AbstractImages/mini_line/cylinder"
+checkpoint_dir: "weights/gatenet/mini_line"
+pretrained_checkpoint: null  # or "path/to/checkpoint.pth"
+
+# ============================================================================
+# Model Config
+# ============================================================================
+image_width: 64
+image_height: 64
+batch_norm_decay: 0.99
+batch_norm_epsilon: 0.001
+
+# ============================================================================
+# Training Config
+# ============================================================================
+num_epochs: 100
+batch_size_concrete: 16
+batch_size_abstract: 1
+num_workers: 4
+
+# ============================================================================
+# Loss Weights
+# ============================================================================
+lambda_concrete: 0.7
+lambda_abstract: 0.3
+
+# ============================================================================
+# Optimizer Config
+# ============================================================================
+learning_rate: 0.0001
+weight_decay: 0.00001
+
+# ============================================================================
+# CROWN Config
+# ============================================================================
+bound_method: "forward"  # Options: 'backward', 'forward', 'crown-ibp', 'ibp'
+
+# ============================================================================
+# Checkpointing
+# ============================================================================
+save_every: 5  # Save checkpoint every N epochs
