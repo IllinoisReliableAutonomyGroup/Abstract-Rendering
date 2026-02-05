@@ -1,0 +1,12 @@
+case_name: "mini_line"
+nn_type: "gatenet"
+bound_method: "backward"
+render_method: "splatfacto"
+odd_type: "cylinder"
+
+width: 64
+height: 64
+
+debug: True
+threshold: [850.0, 530.0, 570.0]
+show_details: False

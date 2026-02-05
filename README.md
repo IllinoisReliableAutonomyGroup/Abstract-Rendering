@@ -146,17 +146,49 @@ violations; blue indicates gates.
 ## Scripts
 `render_gsplat.py`:
 
-`abstract_gsplat`:
+`render_gsplat.py`:
+- Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
+- Reads `configs/${case_name}/config.yaml` for parameters set by the user and `configs/${case_name}/traj.json` for the pose information.
+- Key parameters in `config.yaml`:
+  - Scene selection (`render_method`, `case_name`, `data_time`, `checkpoint_filename`): must match the Nerfstudio output you want to render; use the same format for saving the nerfstudio outputs as mentioned above.
+  - Resolution vs speed (`width`, `height`, `fx`, `fy`, `downsampling_ratio`): start with the Nerfstudio training values; if rendering is slow or hits GPU memory limits, increase `downsampling_ratio` to render smaller images while keeping intrinsics consistent.
+  - Visible depth range (`min_distance`, `max_distance`): if nearby objects are clipped, reduce `min_distance`; if far background clutter dominates, reduce `max_distance`.
+  - Memory/performance (`tile_size_render`, `gs_batch`):These can be adjusted based on available GPUs.
+  - Background and saving (`bg_img_path` vs `bg_pure_color`, `save_ref`, `save_filename`): choose between a solid background color or an image, and whether/where to save results.
+- Output: for each pose in `traj.json`, renders RGB images to `Outputs/RenderedImages/${case_name}/${odd_type}/`.
+
+`abstract_gsplat.py`:
+- Abstract renderer: It takes a *linear set* of perturbed poses around a segment of the trajectory and uses auto_LiRPA to propagate that pose uncertainty through the Gaussian splatting renderer, producing for each pixel a certified lower/upper bound (min/max) over all poses in the set.
+- Uses the same `configs/${case_name}/config.yaml` and `configs/${case_name}/traj.json` as `render_gsplat.py`.
+- Additional `config.yaml` parameters you will tune:
+  - `odd_type`: currently `"cylinder"`, meaning the perturbation set is a cylinder around the nominal path between two waypoints.
+  - `tile_size_abstract`: tile size for pixels for the abstract renderer; tuned based on GPU memory.
+  - `part`: a triplet describing how finely you partition the cylinder (roughly radial / angular / along‑trajectory). Larger values → more cells, tighter bounds, longer computation; smaller values → fewer cells, looser bounds, quicker computation.
+  - `save_bound`: if `true`, saves the lower/upper bound images for each pose cell.
+  - `N_samples`: number of concrete samples drawn inside each cell when you want example concrete images in addition to the bounds.
+- For each consecutive pair of waypoints in `traj.json`, builds the corresponding cylindrical perturbation set, partitions it according to `part`, and then uses `TransferModel + GsplatRGB` wrapped by auto_LiRPA to compute and save abstract records (with per‑pixel min/max) under `Outputs/AbstractImages/${case_name}/${odd_type}/`.
 
 `render_models.py`:
+- The rendering back‑end that both concrete and abstract pipelines rely on:
+  - `TransferModel`: a wrapper that holds the current camera rotation and base translation (and, for abstract rendering, also the cylinder direction and radius describing the pose cell). Given either a concrete pose or abstract cylinder parameters, it uses `utils_transform.py` to build a full camera pose matrix and then calls the underlying renderer.
+  - `GsplatRGBOrigin`: the concrete renderer used by `render_gsplat.py`. It takes Nerfstudio’s Gaussian parameters (means, scales, opacities, colors), preprocesses them once, and for each pose and image tile projects the Gaussians into that tile and alpha‑blends their colors according to the Gaussian splatting algorithm to produce an RGB tile.
+  - `GsplatRGB`: the abstract renderer used by `abstract_gsplat.py`. It implements the same splatting idea as `GsplatRGBOrigin`, but is structured for abstract rendering: for a given pose and tile it (i) crops to only Gaussians that can affect that tile, (ii) splits them into batches controlled by `gs_batch` to fit in memory, and (iii) exposes per‑tile alpha and color tensors that encode each Gaussian’s contribution to each pixel. When `TransferModel(GsplatRGB, ...)` is evaluated under auto_LiRPA with a pose cell as input, these tensors become functions of the abstract input; `utils_alpha_blending.py` then performs interval alpha blending on their LiRPA bounds to obtain per‑pixel lower/upper color bounds over all poses in the perturbation set.
 
-`utils_transform.py`: 
+`utils_transform.py`:
 - Handles all camera and scene coordinate conversions.
 - Builds view matrices from translations and rotations, applies the Nerfstudio world transform and scale, and converts camera‑to‑world transforms into the world‑to‑camera form.
-- Also provides the cylindrical pose representation used to describe paths and pose cells in abstract rendering.
-
+- Also provides the cylindrical pose representation used to describe paths and pose cells in abstract rendering (e.g., mapping abstract cylinder coordinates to concrete translations).
 
 `utils_alpha_blending.py`:
+- Implements the volume‑rendering step for Gaussian splats.
+- For each gaussian, combines opacity and color contributions for each pixel ray using a cumulative product, and extends the same logic to lower/upper bounds in the abstract setting via interval alpha blending.
+
+**Configuration and new cases**:
+- Each case (e.g., `circle`, `line`, `uturn`, `mini_line`) has its own subfolder under `configs/` (such as `configs/circle/`) containing at least:
+  - `config.yaml`: shared configuration for `render_gsplat.py` and `abstract_gsplat.py` as described above.
+  - `traj.yaml` / `traj.json`: trajectory configuration and generated waypoint/pose file.
+  - Optional downstream configs such as `gatenet.yml` and `vis_absimg.yaml`.
+- When creating a new case, you should create a new folder under `configs/` (for example `configs/my_case/`) and add a new `config.yaml` and trajectory files there, rather than modifying the existing case folders.
 
 - Implements the volume‑rendering step for Gaussian splats.
 - For each gaussian, combines opacity and color contributions for each pixel ray using a cumulative product, and extends the same logic to lower/upper bounds in the abstract setting.
