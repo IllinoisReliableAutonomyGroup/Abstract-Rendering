@@ -10,8 +10,8 @@ pretrained_checkpoint: null  # or "path/to/checkpoint.pth"
 # ============================================================================
 # Model Config
 # ============================================================================
-image_width: 64
-image_height: 64
+image_width: 32
+image_height: 32
 batch_norm_decay: 0.99
 batch_norm_epsilon: 0.001
 
@@ -19,15 +19,15 @@ batch_norm_epsilon: 0.001
 # Training Config
 # ============================================================================
 num_epochs: 100
-batch_size_concrete: 16
+batch_size_concrete: 2
 batch_size_abstract: 1
 num_workers: 4
 
 # ============================================================================
 # Loss Weights
 # ============================================================================
-lambda_concrete: 0.7
-lambda_abstract: 0.3
+lambda_concrete: 0.9
+lambda_abstract: 0.1
 
 # ============================================================================
 # Optimizer Config
@@ -38,7 +38,7 @@ weight_decay: 0.00001
 # ============================================================================
 # CROWN Config
 # ============================================================================
-bound_method: "forward"  # Options: 'backward', 'forward', 'crown-ibp', 'ibp'
+bound_method: "backward"  # Options: 'backward', 'forward', 'crown-ibp', 'ibp'
 
 # ============================================================================
 # Checkpointing

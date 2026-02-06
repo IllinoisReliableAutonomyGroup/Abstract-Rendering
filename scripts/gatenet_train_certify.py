@@ -11,6 +11,8 @@ from PIL import Image
 from tqdm import tqdm
 import argparse
 from pathlib import Path
+from torchvision import transforms
+import torch.nn.functional as F
 
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 if grandfather_path not in sys.path:
@@ -27,10 +29,15 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class ConcreteImageDataset(Dataset):
     """Dataset for concrete (real) images with pose labels"""
-    def __init__(self, samples_json, image_root):
+    def __init__(self, samples_json, image_root, target_size=(64, 64)):
         with open(samples_json, 'r') as f:
             self.samples = json.load(f)
         self.image_root = image_root
+
+        self.transform = transforms.Compose([
+            transforms.Resize(target_size),
+            transforms.ToTensor(),
+        ])
         
         print(f"Loaded {len(self.samples)} samples from {samples_json}")
         
@@ -46,8 +53,7 @@ class ConcreteImageDataset(Dataset):
         
         # Load image
         img = Image.open(img_path).convert('RGB')
-        img = np.array(img, dtype=np.float32) / 255.0  # Normalize to [0, 1]
-        img = torch.from_numpy(img).permute(2, 0, 1)  # [3, H, W]
+        img = self.transform(img)
         
         # Get relative pose (this is X_center - the 3D position)
         pose = torch.tensor(sample['relative_pose'], dtype=torch.float32)  # [x, y, z]
@@ -57,10 +63,11 @@ class ConcreteImageDataset(Dataset):
 
 class AbstractImageDataset(Dataset):
     """Dataset for abstract images with bound information"""
-    def __init__(self, abstract_folder):
+    def __init__(self, abstract_folder, target_size=(64, 64)):
         self.abstract_folder = abstract_folder
         self.pt_files = sorted([f for f in os.listdir(abstract_folder) if f.endswith('.pt')])
-        
+        self.target_size = target_size
+
         print(f"Found {len(self.pt_files)} abstract .pt files in {abstract_folder}")
         
     def __len__(self):
@@ -70,12 +77,28 @@ class AbstractImageDataset(Dataset):
         pt_path = os.path.join(self.abstract_folder, self.pt_files[idx])
         data = torch.load(pt_path, weights_only=False)
         
+        
         # Extract data
         lower_img = data['lower']  # [H, W, 3]
         upper_img = data['upper']  # [H, W, 3]
         X_lower = data['xl']  # [3]
         X_upper = data['xu']  # [3]
         
+        if lower_img.shape[0] != self.target_size[1] or lower_img.shape[1] != self.target_size[0]:
+            lower_img = F.interpolate(
+                lower_img.permute(2, 0, 1).unsqueeze(0),
+                size=(self.target_size[1], self.target_size[0]),
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(0).permute(1, 2, 0)
+            
+            upper_img = F.interpolate(
+                upper_img.permute(2, 0, 1).unsqueeze(0),
+                size=(self.target_size[1], self.target_size[0]),
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(0).permute(1, 2, 0)
+
         # Convert images to [3, H, W] format
         lower_img = lower_img.permute(2, 0, 1)  # [3, H, W]
         upper_img = upper_img.permute(2, 0, 1)  # [3, H, W]
@@ -93,7 +116,7 @@ def concrete_loss(predictions, targets):
 
 
 def abstract_loss(Y_lower, Y_upper, X_lower, X_upper):
-    """MSE loss for abstract images: MSE(Y_lower, X_lower) + MSE(Y_upper, X_upper)"""
+    """MSE loss for abstract images"""
     loss_lower = nn.MSELoss()(Y_lower, X_lower)
     loss_upper = nn.MSELoss()(Y_upper, X_upper)
     return loss_lower + loss_upper
@@ -105,55 +128,33 @@ def abstract_loss(Y_lower, Y_upper, X_lower, X_upper):
 
 def crown_propagate(model, lower_img, upper_img, bound_method='forward'):
     """
-    Propagate bounds through GateNet using auto_LiRPA
-    
-    Args:
-        model: GateNet model
-        lower_img: [B, 3, H, W] lower bound images
-        upper_img: [B, 3, H, W] upper bound images
-        bound_method: 'backward', 'forward', 'crown-ibp', or 'ibp'
-    
-    Returns:
-        Y_lower: [B, 3] lower bounds on output
-        Y_upper: [B, 3] upper bounds on output
+    Propagate bounds through GateNet using auto_LiRPA with gradients
     """
-    # Use center as reference input
     img_center = (lower_img + upper_img) / 2.0
     
-    # Wrap model with BoundedModule
-    bound_opts = {
-        'conv_mode': 'matrix',
-    }
+    bound_opts = {'conv_mode': 'matrix'}
     lirpa_model = BoundedModule(model, img_center, bound_opts=bound_opts, device=DEVICE)
     
-    # Define perturbation using explicit bounds
     ptb = PerturbationLpNorm(x_L=lower_img, x_U=upper_img)
     img_ptb = BoundedTensor(img_center, ptb)
     
-    # Compute bounds
-
+    # NO torch.no_grad() - forward method supports gradients!
     Y_lower, Y_upper = lirpa_model.compute_bounds(x=(img_ptb,), method=bound_method)
     
-    del lirpa_model
-    del img_ptb
-    torch.cuda.empty_cache()
-    
     return Y_lower, Y_upper
-
 
 # ============================================================================
 # Training Loop
 # ============================================================================
 
 def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoch):
-    """Train for one epoch"""
+    """Train for one epoch with BOTH concrete and abstract losses"""
     model.train()
     
     lambda_concrete = config['lambda_concrete']
     lambda_abstract = config['lambda_abstract']
     bound_method = config['bound_method']
     
-    # Create iterators
     concrete_iter = iter(concrete_loader)
     abstract_iter = iter(abstract_loader)
     
@@ -162,33 +163,32 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
     total_abstract_loss = 0.0
     num_steps = 0
     
-    # Determine number of iterations (use the longer loader)
     num_iters = max(len(concrete_loader), len(abstract_loader))
-    
     pbar = tqdm(range(num_iters), desc=f"Epoch {epoch}")
     
     for step in pbar:
-        optimizer.zero_grad()
+        loss_c_val = 0.0
+        loss_a_val = 0.0
         
-        loss_c = 0.0
-        loss_a = 0.0
-        
-        # ===== Concrete Loss =====
+        # ===== Concrete Loss (separate step) =====
         try:
             concrete_imgs, concrete_poses = next(concrete_iter)
             concrete_imgs = concrete_imgs.to(DEVICE)
             concrete_poses = concrete_poses.to(DEVICE)
             
-            # Forward pass
+            optimizer.zero_grad()
             predictions = model(concrete_imgs)
             loss_c = concrete_loss(predictions, concrete_poses)
+            (lambda_concrete * loss_c).backward()
+            optimizer.step()
+            
+            loss_c_val = loss_c.item()
             
         except StopIteration:
-            # Restart iterator if exhausted
             concrete_iter = iter(concrete_loader)
-            loss_c = 0.0
+            loss_c_val = 0.0
         
-        # ===== Abstract Loss =====
+        # ===== Abstract Loss (separate step) =====
         try:
             lower_imgs, upper_imgs, X_lowers, X_uppers = next(abstract_iter)
             lower_imgs = lower_imgs.to(DEVICE)
@@ -196,39 +196,37 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
             X_lowers = X_lowers.to(DEVICE)
             X_uppers = X_uppers.to(DEVICE)
             
-            # Propagate bounds through model
-            Y_lowers, Y_uppers = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+            optimizer.zero_grad()
             
-            # Compute abstract loss (averaged over batch)
-            loss_a = abstract_loss(Y_lowers, Y_uppers, X_lowers, X_uppers)
+            # Get bounds from CROWN propagation (has gradients!)
+            Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+            
+            # Loss: predictions should match ground truth bounds
+            loss_a = abstract_loss(Y_lower_pred, Y_upper_pred, X_lowers, X_uppers)
+            (lambda_abstract * loss_a).backward()
+            optimizer.step()
+            
+            loss_a_val = loss_a.item()
             
         except StopIteration:
-            # Restart iterator if exhausted
             abstract_iter = iter(abstract_loader)
-            loss_a = 0.0
+            loss_a_val = 0.0
         
-        # ===== Combined Loss =====
-        loss_total = lambda_concrete * loss_c + lambda_abstract * loss_a
+        # ===== Logging =====
+        loss_total_val = lambda_concrete * loss_c_val + lambda_abstract * loss_a_val
         
-        # Backward and optimize
-        if loss_total > 0:
-            loss_total.backward()
-            optimizer.step()
-        
-        # Logging
-        total_loss += loss_total.item()
-        total_concrete_loss += loss_c.item() if isinstance(loss_c, torch.Tensor) else 0.0
-        total_abstract_loss += loss_a.item() if isinstance(loss_a, torch.Tensor) else 0.0
+        total_loss += loss_total_val
+        total_concrete_loss += loss_c_val
+        total_abstract_loss += loss_a_val
         num_steps += 1
         
         # Update progress bar
         pbar.set_postfix({
-            'loss': f'{loss_total.item():.4f}',
-            'loss_c': f'{loss_c.item() if isinstance(loss_c, torch.Tensor) else 0.0:.4f}',
-            'loss_a': f'{loss_a.item() if isinstance(loss_a, torch.Tensor) else 0.0:.4f}'
+            'loss': f'{loss_total_val:.4f}',
+            'loss_c': f'{loss_c_val:.4f}',
+            'loss_a': f'{loss_a_val:.4f}'
         })
     
-    # Return average losses
     return {
         'total': total_loss / num_steps,
         'concrete': total_concrete_loss / num_steps,
@@ -250,10 +248,12 @@ def main(config):
     print("\n=== Loading Datasets ===")
     concrete_dataset = ConcreteImageDataset(
         samples_json=config['concrete_samples_json'],
-        image_root=config['concrete_image_root']
+        image_root=config['concrete_image_root'],
+        target_size=(config['image_width'], config['image_height'])
     )
     abstract_dataset = AbstractImageDataset(
-        abstract_folder=config['abstract_folder']
+        abstract_folder=config['abstract_folder'],
+        target_size=(config['image_width'], config['image_height'])
     )
     
     print(f"Concrete samples: {len(concrete_dataset)}")
@@ -337,10 +337,10 @@ def main(config):
             }, checkpoint_path)
             print(f"  Saved checkpoint: {checkpoint_path}")
         
-        # Save best model
+        # Save best model (also used as latest)
         if losses['total'] < best_loss:
             best_loss = losses['total']
-            best_path = os.path.join(config['checkpoint_dir'], 'best_model.pth')
+            best_path = os.path.join(config['checkpoint_dir'], 'latest.pth')
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
