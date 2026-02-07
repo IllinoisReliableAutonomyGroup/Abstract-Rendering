@@ -30,11 +30,13 @@ or refer to the official [Nerfstudio installation guide](https://docs.nerf.studi
 
 ### 1. Clone the Abstract-Rendering repository
 
-Download the repository from GitHub:
+Download the repository from GitHub and remove the bundled `auto_LiRPA` folder (you will link your own copy in Step 2):
 
 ```bash
 cd ~
 git clone --branch master https://github.com/IllinoisReliableAutonomyGroup/Abstract-Rendering.git
+cd ~/Abstract-Rendering
+rm -rf auto_LiRPA
 ```
 
 ### 2. Install auto_LiRPA
@@ -58,11 +60,11 @@ You may either use your existing Nerfstudio data or download the pre-reconstruct
 Below is visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
-### 4. (Optional) Run via Docker
+### 4. Run via Docker
 
 This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
 
-- **Prerequisites**: Docker installed on your machine, plus the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
+- **Prerequisites**: Complete Steps 1–3 above (clone this repo, install and link your local `auto_LiRPA`, and optionally download scene data), have Docker installed on your machine, and install the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
 - **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
   ```bash
   cd ~/Abstract-Rendering
