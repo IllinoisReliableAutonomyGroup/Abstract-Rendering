@@ -30,11 +30,13 @@ or refer to the official [Nerfstudio installation guide](https://docs.nerf.studi
 
 ### 1. Clone the Abstract-Rendering repository
 
-Download the repository from GitHub:
+Download the repository from GitHub and remove the bundled `auto_LiRPA` folder (you will link your own copy in Step 2):
 
 ```bash
 cd ~
 git clone --branch master https://github.com/IllinoisReliableAutonomyGroup/Abstract-Rendering.git
+cd ~/Abstract-Rendering
+rm -rf auto_LiRPA
 ```
 
 ### 2. Install auto_LiRPA
@@ -43,7 +45,7 @@ Install the neural network verification library *auto_LiRPA*, and symbolic link 
 cd ~
 git clone --branch master https://github.com/Verified-Intelligence/auto_LiRPA.git
 cd ~/Abstract-Rendering
-cd ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
+ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
 ```
 
 
@@ -58,23 +60,31 @@ You may either use your existing Nerfstudio data or download the pre-reconstruct
 Below is visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
-### 4. (Optional) Run via Docker
+### 4. Run via Docker
 
-This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, auto_LiRPA, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
+This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
 
-- **Prerequisites**: Docker installed on your machine, plus the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
+- **Prerequisites**: Complete Steps 1–3 above (clone this repo, install and link your local `auto_LiRPA`, and optionally download scene data), have Docker installed on your machine, and install the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
 - **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
   ```bash
   cd ~/Abstract-Rendering
   docker build -t abstract-rendering:latest .
   ```
-- **Start a container**: Run a container from that image, mounting this repository into the container and enabling GPU access so that the container can see your Nerfstudio scenes and output directories:
+- **Start a container (mount this repo and your local auto_LiRPA)**: Assuming you followed Step 2 to clone auto_LiRPA into `~/auto_LiRPA` and create the symlink in `~/Abstract-Rendering`, run:
   ```bash
+  cd ~/Abstract-Rendering
   docker run --gpus all -it --rm \
-    -v ~/Abstract-Rendering:/workspace/Abstract-Rendering \
-    abstract-rendering:latest
+    -v "$HOME/Abstract-Rendering":/workspace/Abstract-Rendering \
+    -v "$HOME/auto_LiRPA":"$HOME/auto_LiRPA" \
+    abstract-rendering:latest \
+    /bin/bash
   ```
-- **Inside the container**: The working directory will contain this repository, and all necessary libraries are already installed. You can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
+  The first `-v` makes your local Abstract-Rendering repository visible at `/workspace/Abstract-Rendering` inside the container. The second `-v` mounts your `~/auto_LiRPA` clone at the same absolute path inside the container so that the `auto_LiRPA` symlink in this repo continues to resolve and the code uses your local auto_LiRPA version.
+- **Inside the container**: Once the container starts, run
+  ```bash
+  cd /workspace/Abstract-Rendering
+  ```
+  and you can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
 
 ## Examples
 
@@ -85,7 +95,7 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
 You can use the command below to render images from a specified set of waypoints in a given scene (e.g. *circle*):
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/render_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/samples.json
 ```
 
@@ -97,7 +107,7 @@ The rendered image (`ref_######.png`) will be saved under `~/Abstract-Rendering/
 You can use the command below to generate abstract images from a specified set of waypoints in a given scene (e.g. *circle*):
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/abstract_gsplat.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
 ```
 
@@ -106,7 +116,7 @@ The rendered images (`abstract_######.pt`) will be saved under
 
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/vis_absimg.py --config configs/${case_name}/vis_absimg.yaml
 ```
 
@@ -118,21 +128,21 @@ where the top-left subfigure shows sample concrete image from the pose cell; the
 ### Train Gatenet
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/train_gatenet.py --config configs/${case_name}/gatenet.yml --samples configs/${case_name}/samples.json
 ```
 
 ### Certify Gatenet
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/certify_gatenet.py --config configs/${case_name}/gatenet.yml
 ```
 
 ### Visualize Certification Results
 ```bash
 cd ~/Abstract-Rendering
-export case_name=circle
+export case_name=mini_line
 python3 scripts/plot_gatenet.py --config configs/${case_name}/gatenet.yml --traj configs/${case_name}/traj.yaml
 ```
 
