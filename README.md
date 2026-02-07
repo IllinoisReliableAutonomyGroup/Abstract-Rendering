@@ -64,6 +64,8 @@ Below is visualization of scene *circle*.
 
 This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
 
+**Important: Please complete all prior setup steps (1–3) before using Docker in this step.**
+
 - **Prerequisites**: Complete Steps 1–3 above (clone this repo, install and link your local `auto_LiRPA`, and optionally download scene data), have Docker installed on your machine, and install the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
 - **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
   ```bash
