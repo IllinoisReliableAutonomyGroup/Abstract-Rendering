@@ -101,7 +101,7 @@ def alpha_blending_ref(net, input_ref):
         return color_out
 
 
-def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
+def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method, hl, wl, hu, wu):
     N = net.call_model("get_num")
     gs_batch = net.call_model("get_gs_batch")
     bg_color=(net.call_model("get_bg_color_tile")).unsqueeze(0).unsqueeze(-2) #[1, TH, TW, N, 3]
@@ -114,15 +114,22 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
 
         hl,wl,hu,wu = (net.call_model("get_tile_dict")[key] for key in ["hl", "wl", "hu", "wu"])
 
-        ptb = PerturbationLpNorm(x_L=input_lb,x_U=input_ub)
-        input_ptb = BoundedTensor(input_ref, ptb)
+        # Combine input bounds with tile bounds (lower with lower, upper with upper)
+        tile_lb = torch.tensor([[hl, wl]], device=input_lb.device, dtype=input_lb.dtype)
+        tile_ub = torch.tensor([[hu, wu]], device=input_ub.device, dtype=input_ub.dtype)
+        combined_lb = torch.cat([input_lb, tile_lb], dim=-1)
+        combined_ub = torch.cat([input_ub, tile_ub], dim=-1)
+        combined_ref = torch.cat([input_ref, 0.5 * (tile_lb + tile_ub)], dim=-1)
+
+        ptb = PerturbationLpNorm(x_L=combined_lb, x_U=combined_ub)
+        input_ptb = BoundedTensor(combined_ref, ptb)
 
         with torch.no_grad():
             for i, idx_start in enumerate(range(0, N, gs_batch)):
                 idx_end = min(idx_start + gs_batch, N)
 
                 net.call_model("update_model_param",idx_start,idx_end,"middle")
-                model = BoundedModule(net, input_ref, bound_opts=bound_opts, device=DEVICE)
+                model = BoundedModule(net, combined_ref, bound_opts=bound_opts, device=DEVICE)
 
                 # Compute IBP bounds for reference
                 alpha_ibp_lb, alpha_ibp_ub = model.compute_bounds(x=(input_ptb, ), method="ibp")

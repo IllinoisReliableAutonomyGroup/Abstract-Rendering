@@ -188,7 +188,7 @@ def main(setup_dict):
                     img_ref[hl:hu, wl:wu, :] = ref_tile_np
 
                 if save_bound:
-                    lb_tile, ub_tile = alpha_blending_ptb(verf_net, input_center, input_lb, input_ub, bound_method)
+                    lb_tile, ub_tile = alpha_blending_ptb(verf_net, input_center, input_lb, input_ub, bound_method, hl, wl, hu, wu)
                     lb_tile_np = lb_tile.squeeze(0).detach().cpu().numpy() # [TH, TW, 3]
                     ub_tile_np = ub_tile.squeeze(0).detach().cpu().numpy()
                     img_lb[hl:hu, wl:wu, :] = lb_tile_np

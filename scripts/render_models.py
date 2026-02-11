@@ -22,12 +22,14 @@ class TransferModel(nn.Module):
         self.radius = radius
 
     def preprocess(self, input):
+        pose_input = input[:, :3]
+        tile_bounds = input[:, 3:]
         if self.pipeline_type == "rendering":
-            trans = input+self.base_trans.unsqueeze(0)
+            trans = pose_input+self.base_trans.unsqueeze(0)
         elif self.pipeline_type == "abstract-rendering":
-            trans = input_to_trans(input, self.base_trans, self.odd_type, self.direction, self.radius)
+            trans = input_to_trans(pose_input, self.base_trans, self.odd_type, self.direction, self.radius)
         pose_matrix = pose_to_matrix(trans, self.rot, self.transform_hom, self.scale)
-        return pose_matrix
+        return pose_matrix, tile_bounds
     
     def update_model_param(self, rot=None, base_trans=None, direction=None, radius=None):
         self.rot = rot if rot is not None else self.rot
@@ -40,16 +42,15 @@ class TransferModel(nn.Module):
         return method(*args, **kwargs)
 
     def call_model_preprocess(self, method_name, input, *args, **kwargs):
-  
-        pose = self.preprocess(input)
+
+        pose, tile_bounds = self.preprocess(input)
         method = getattr(self.model, method_name)
-        
+
         return method(pose, *args, **kwargs)
     
     def forward(self, input):
-        pose = self.preprocess(input)
-        res = self.model.forward(pose)
-        return res
+        pose, tile_bounds = self.preprocess(input)
+        return self.model.forward(pose, tile_bounds)
     
 class GsplatRGBOrigin(nn.Module):
     def __init__(self, camera_dict, scene_dict_all, min_distance=0.01, max_distance=100.0, bg_color=None, eps2d=5.0):
@@ -406,7 +407,7 @@ class GsplatRGB(nn.Module):
         self.idx_end = idx_end
         self.blending_method = blending_method
 
-    def render_alpha(self, pose, scene_dict, eps_max=1.0):
+    def render_alpha(self, pose, scene_dict, eps_max=1.0, tile_bounds=None):
 
         # Extract Parameters
         fx, fy, width, height = (self.camera_dict[key] for key in ["fx", "fy", "width", "height"])
@@ -418,8 +419,12 @@ class GsplatRGB(nn.Module):
         pose = pose.to(DEVICE)
 
         # Generate Mesh Grid
-        pix_coord = torch.stack(torch.meshgrid(torch.arange(wl,wu), torch.arange(hl,hu), indexing='xy'), dim=-1)
-        pix_coord = pix_coord.unsqueeze(0).to(DEVICE)  # [1, TH, TW, 2]
+        if tile_bounds is not None:
+            # Use tile_bounds from input (for auto_LiRPA bound propagation)
+            pix_coord = tile_bounds.view(1, 1, 1, 2).to(DEVICE)
+        else:
+            pix_coord = torch.stack(torch.meshgrid(torch.arange(wl,wu), torch.arange(hl,hu), indexing='xy'), dim=-1)
+            pix_coord = pix_coord.unsqueeze(0).to(DEVICE)  # [1, TH, TW, 2]
 
         # Step 1: Convert from World Coordinates to Camera Coordinates
         means_hom_cam = torch.matmul(pose, means_hom_world[None, :, :].transpose(-1,-2)).transpose(-1,-2)    # [1, N, 4]
@@ -551,21 +556,21 @@ class GsplatRGB(nn.Module):
 
         return colors_alpha
     
-    def render_alpha_tile(self, pose):
+    def render_alpha_tile(self, pose, tile_bounds):
         scene_dict = {
             name: attr[self.idx_start:self.idx_end]
             for name, attr in self.scene_dict.items()
         }
 
-        alpha = self.render_alpha(pose, scene_dict) #[1, TH, TW, N, 3]
+        alpha = self.render_alpha(pose, scene_dict, tile_bounds=tile_bounds) #[1, TH, TW, N, 3]
         return alpha
         
 
-    def forward(self, input):
+    def forward(self, input, tile_bounds):
         # Extract Input
         pose = input
 
-        return self.render_alpha_tile(pose)
+        return self.render_alpha_tile(pose, tile_bounds)
         
 
 ### Belows are backup classes for alpha blending, don't be called in main pipeline###
