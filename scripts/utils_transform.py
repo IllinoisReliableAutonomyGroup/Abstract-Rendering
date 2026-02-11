@@ -109,12 +109,24 @@ def input_to_trans(input, base_trans, type, direction=None, radius=None):
         else:
             direction, radius = direction.to(input.device), radius.to(input.device)
             t, o1, o2 = orthogonal_basis_from_direction(direction)
-            point = (
-                dir_coeff*direction.unsqueeze(0) +
-                rad_coeff*radius * torch.cos(angle).unsqueeze(1) * o1.unsqueeze(0) +
-                rad_coeff*radius * torch.sin(angle).unsqueeze(1) * o2.unsqueeze(0)
+
+            # Pad 3D vectors to 5D for auto_LiRPA compatibility
+            # (auto_LiRPA's coefficient matrices have 5 columns for 5D input)
+            pad_zeros = torch.zeros(2, device=input.device, dtype=input.dtype)
+            t_5d = torch.cat([t, pad_zeros])
+            o1_5d = torch.cat([o1, pad_zeros])
+            o2_5d = torch.cat([o2, pad_zeros])
+
+            # Compute in 5D space (last 2 dims will be zero)
+            point_5d = (
+                dir_coeff.unsqueeze(-1) * t_5d.unsqueeze(0) +
+                rad_coeff.unsqueeze(-1) * radius * torch.cos(angle).unsqueeze(-1) * o1_5d.unsqueeze(0) +
+                rad_coeff.unsqueeze(-1) * radius * torch.sin(angle).unsqueeze(-1) * o2_5d.unsqueeze(0)
             )
-            point+=base_trans.unsqueeze(0)
+
+            # Slice back to 3D
+            point = point_5d[:, :3]
+            point += base_trans.unsqueeze(0)
 
     return point
 
