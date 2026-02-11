@@ -46,7 +46,7 @@ class TransferModel(nn.Module):
         pose, tile_bounds = self.preprocess(input)
         method = getattr(self.model, method_name)
 
-        return method(pose, *args, **kwargs)
+        return method(pose, tile_bounds, *args, **kwargs)
     
     def forward(self, input):
         pose, tile_bounds = self.preprocess(input)
@@ -309,7 +309,7 @@ class GsplatRGB(nn.Module):
             bg_color = torch.zeros((height, width, 3), device=DEVICE)
         self.bg_color = bg_color
 
-    def sort_gauss(self, pose):
+    def sort_gauss(self, pose, tile_bounds):
 
         # Extract Parameters
         #fx, fy, width, height = (self.camera_dict[key] for key in ["fx", "fy", "width", "height"])
@@ -334,8 +334,8 @@ class GsplatRGB(nn.Module):
         }
 
         # print(f"Number of Gauss after Sorting {mask.sum().item()}")
-        
-    def crop_gauss(self, pose, tile_dict, alpha_acc_thre = 0.99):
+
+    def crop_gauss(self, pose, tile_bounds, tile_dict, alpha_acc_thre = 0.99):
 
         # Update Tile information
         self.tile_dict = tile_dict
@@ -344,7 +344,7 @@ class GsplatRGB(nn.Module):
         self.bg_color_tile = self.bg_color[hl:hu, wl:wu, :]
 
         # Compute Alpha
-        alpha = self.render_alpha(pose, self.scene_dict_sorted).squeeze(-1) # [B, TH, TW, N]
+        alpha = self.render_alpha(pose, self.scene_dict_sorted, tile_bounds).squeeze(-1) # [B, TH, TW, N]
         alpha_max = alpha.amax(dim=(0, 1, 2))
 
         # Filter Too small Alpha
@@ -407,7 +407,7 @@ class GsplatRGB(nn.Module):
         self.idx_end = idx_end
         self.blending_method = blending_method
 
-    def render_alpha(self, pose, scene_dict, eps_max=1.0, tile_bounds=None):
+    def render_alpha(self, pose, scene_dict, tile_bounds, eps_max=1.0):
 
         # Extract Parameters
         fx, fy, width, height = (self.camera_dict[key] for key in ["fx", "fy", "width", "height"])
@@ -419,12 +419,13 @@ class GsplatRGB(nn.Module):
         pose = pose.to(DEVICE)
 
         # Generate Mesh Grid
-        if tile_bounds is not None:
-            # Use tile_bounds from input (for auto_LiRPA bound propagation)
-            pix_coord = tile_bounds.view(1, 1, 1, 2).to(DEVICE)
-        else:
+        if tile_bounds.numel() == 0:
+            # Fallback to meshgrid for preprocessing (when tile_bounds is empty)
             pix_coord = torch.stack(torch.meshgrid(torch.arange(wl,wu), torch.arange(hl,hu), indexing='xy'), dim=-1)
             pix_coord = pix_coord.unsqueeze(0).to(DEVICE)  # [1, TH, TW, 2]
+        else:
+            # Use tile_bounds from input for auto_LiRPA bound propagation
+            pix_coord = tile_bounds.view(1, 1, 1, 2).to(DEVICE)
 
         # Step 1: Convert from World Coordinates to Camera Coordinates
         means_hom_cam = torch.matmul(pose, means_hom_world[None, :, :].transpose(-1,-2)).transpose(-1,-2)    # [1, N, 4]
@@ -544,13 +545,13 @@ class GsplatRGB(nn.Module):
 
         return alpha # [1, TH, TW, N, 1]
 
-    def render_color_alpha(self, pose):
+    def render_color_alpha(self, pose, tile_bounds):
         scene_dict = {
             name: attr[self.idx_start:self.idx_end]
             for name, attr in self.scene_dict.items()
         }
 
-        alpha = self.render_alpha(pose, scene_dict) #[1, TH, TW, N, 3]
+        alpha = self.render_alpha(pose, scene_dict, tile_bounds) #[1, TH, TW, N, 3]
         colors = scene_dict["colors"].view(1, 1, 1, alpha.size(-2), 3).repeat(1, alpha.size(1), alpha.size(2), 1, 1) #[1, TH, TW, N, 3]
         colors_alpha = alpha_blending(alpha, colors, self.blending_method, self.triu_mask) # [1, TH, TW, N, 4]
 
