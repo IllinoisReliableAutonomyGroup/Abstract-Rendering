@@ -132,7 +132,7 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method, hl, wl,
                 model = BoundedModule(net, combined_ref, bound_opts=bound_opts, device=DEVICE)
 
                 # Compute IBP bounds for reference
-                alpha_ibp_lb, alpha_ibp_ub = model.compute_bounds(x=(input_ptb, ), method="ibp")
+                alpha_ibp_lb, alpha_ibp_ub = model.compute_bounds(x=(input_ptb,), method="ibp")
                 reference_interm_bounds = {}
                 for node in model.nodes():
                     if (node.perturbed
@@ -140,23 +140,19 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method, hl, wl,
                         and isinstance(node.upper, torch.Tensor)):
                         reference_interm_bounds[node.name] = (node.lower, node.upper)
 
-                # required_A = defaultdict(set)
-                # required_A[model.output_name[0]].add(model.input_name[0])
+                # Compute backward bounds (final output)
+                alpha_int_lb, alpha_int_ub = model.compute_bounds(
+                    x=(input_ptb,),
+                    method="backward",
+                    reference_bounds=reference_interm_bounds
+                )  # Output shape: [N] (tile-level bound valid for all pixels)
 
-                # Compute linear buond for alpha
-                alpha_int_lb, alpha_int_ub= model.compute_bounds(
-                    x= (input_ptb, ), 
-                    method=bound_method, 
-                    reference_bounds=reference_interm_bounds, 
-                )  #[1, TH, TW, N, 4]
-                
-                # lower_A, lower_bias = A_dict[model.output_name[0]][model.input_name[0]]['lA'], A_dict[model.output_name[0]][model.input_name[0]]['lbias']
-                # upper_A, upper_bias = A_dict[model.output_name[0]][model.input_name[0]]['uA'], A_dict[model.output_name[0]][model.input_name[0]]['ubias']
-                # print(f"lower_A shape: {lower_A.shape}, lower_bias shape: {lower_bias.shape}")
-                # print(f"upper_A shape: {upper_A.shape}, upper_bias shape: {upper_bias.shape}")
-        
-                alpha_int_lb = alpha_int_lb.reshape(1, hu-hl, wu-wl, idx_end-idx_start, 1)
-                alpha_int_ub = alpha_int_ub.reshape(1, hu-hl, wu-wl, idx_end-idx_start, 1)
+                # Broadcast tile-level bounds to all pixels in tile
+                # The tile-level bound is valid for all pixels, so we expand it
+                TH, TW = hu - hl, wu - wl
+                num_gauss = idx_end - idx_start
+                alpha_int_lb = alpha_int_lb.view(1, 1, 1, num_gauss, 1).expand(1, TH, TW, num_gauss, 1)
+                alpha_int_ub = alpha_int_ub.view(1, 1, 1, num_gauss, 1).expand(1, TH, TW, num_gauss, 1)
 
                 alphas_int_lb.append(alpha_int_lb.detach())
                 alphas_int_ub.append(alpha_int_ub.detach())
