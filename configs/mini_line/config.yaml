@@ -3,7 +3,7 @@ render_method: "splatfacto"
 case_name: "mini_line"
 odd_type: "cylinder"
 save_filename: null
-debug: false
+debug: true
 
 width: 256
 height: 256
@@ -12,12 +12,12 @@ fy: 216
 eps2d: 8.0
 
 downsampling_ratio: 4
-tile_size_abstract: 16
+tile_size_abstract: 4
 tile_size_render: 24
 min_distance: 0.01
 max_distance: 100.0
-gs_batch: 100
-part: [1,2,2]
+gs_batch: 200
+part: [100, 200, 200]
 
 data_time: "2025-05-09_151825"
 checkpoint_filename: "step-000040003.ckpt"

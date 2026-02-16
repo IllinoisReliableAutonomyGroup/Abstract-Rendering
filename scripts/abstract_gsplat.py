@@ -168,7 +168,7 @@ def main(setup_dict):
             ] 
 
             if debug:
-                pbar3 = tqdm(total=len(tiles_queue),desc="Processing Tiles", unit="item", disable=True)
+                pbar3 = tqdm(total=len(tiles_queue),desc="Processing Tiles", unit="item")
 
             while tiles_queue!=[]:
                 hl,wl,hu,wu = tiles_queue.pop(0)
