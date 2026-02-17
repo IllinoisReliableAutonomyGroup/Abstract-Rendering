@@ -1,9 +1,9 @@
-bound_method: "forward"
+bound_method: "backward"
 render_method: "splatfacto"
 case_name: "test"
 odd_type: "cylinder"
 save_filename: null
-debug: false
+debug: true
 
 width: 256
 height: 256
@@ -11,9 +11,9 @@ fx: 216
 fy: 216
 eps2d: 8.0
 
-downsampling_ratio: 1
+downsampling_ratio: 4
 tile_size_abstract: 16
-tile_size_render: 24
+tile_size_render: 16
 min_distance: 0.01
 max_distance: 100.0
 gs_batch: 110

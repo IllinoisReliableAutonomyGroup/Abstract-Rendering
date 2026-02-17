@@ -1,0 +1,6 @@
+Alpha Stats: min 0.0, max 0.9999946355819702, mean 0.0006125260842964053
+Alpha Stats: min 0.0, max 0.9999217987060547, mean 0.00013930608110968024
+Alpha Stats: min 0.0, max 0.0, mean 0.0
+Alpha Stats: min 0.0, max 0.0, mean 0.0
+Alpha Stats: min 0.0, max 1.5079975128173828e-05, mean 1.49448118810791e-12
+Alpha Stats: min 0.0, max 0.0, mean 0.0

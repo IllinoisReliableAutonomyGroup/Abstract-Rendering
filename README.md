@@ -59,19 +59,11 @@ Below is visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
 ### 4. Run via Docker
-<<<<<<< jai-dev
 
 This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
 
 **Important: Please complete all prior setup steps (1–3) before using Docker in this step.**
 
-=======
-
-This repository also includes a Dockerfile that sets up a GPU-enabled environment with CUDA, PyTorch, Nerfstudio, and the other required Python dependencies pre-installed. Using Docker is optional but can make the environment more reproducible and easier to share with others.
-
-**Important: Please complete all prior setup steps (1–3) before using Docker in this step.**
-
->>>>>>> master
 - **Prerequisites**: Complete Steps 1–3 above (clone this repo, install and link your local `auto_LiRPA`, and optionally download scene data), have Docker installed on your machine, and install the NVIDIA Container Toolkit if you want to use a GPU from inside the container.
 - **Build the image**: From the root of this repository, build a Docker image using the provided Dockerfile, for example under the name `abstract-rendering:latest`:
   ```bash
@@ -86,7 +78,6 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
     -v "$HOME/auto_LiRPA":"$HOME/auto_LiRPA" \
     abstract-rendering:latest \
     /bin/bash
-<<<<<<< jai-dev
   ```
   The first `-v` makes your local Abstract-Rendering repository visible at `/workspace/Abstract-Rendering` inside the container. The second `-v` mounts your `~/auto_LiRPA` clone at the same absolute path inside the container so that the `auto_LiRPA` symlink in this repo continues to resolve and the code uses your local auto_LiRPA version.
 - **Inside the container**: Once the container starts, run
@@ -94,16 +85,6 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
   cd /workspace/Abstract-Rendering
   ```
   and you can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
-=======
-  ```
-  The first `-v` makes your local Abstract-Rendering repository visible at `/workspace/Abstract-Rendering` inside the container. The second `-v` mounts your `~/auto_LiRPA` clone at the same absolute path inside the container so that the `auto_LiRPA` symlink in this repo continues to resolve and the code uses your local auto_LiRPA version.
-- **Inside the container**: Once the container starts, run
-  ```bash
-  cd /workspace/Abstract-Rendering
-  ```
-  and you can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
-
->>>>>>> master
 
 ## Examples
 
@@ -173,7 +154,6 @@ where green indicates certified regions; red denotes potential
 violations; blue indicates gates.
 
 ## Scripts
-`render_gsplat.py`:
 
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.

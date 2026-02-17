@@ -1,26 +1,26 @@
 bound_method: "forward"
 render_method: "splatfacto"
-case_name: "mini_line"
+case_name: "bird"
 odd_type: "cylinder"
 save_filename: null
 debug: false
 
-width: 256
-height: 256
-fx: 216
-fy: 216
-eps2d: 8.0
+width: 640
+height: 400
+fx: 705
+fy: 705
+eps2d: 10
 
-downsampling_ratio: 4
-tile_size_abstract: 4
-tile_size_render: 8
+downsampling_ratio: 20
+tile_size_abstract: 16
+tile_size_render: 16
 min_distance: 0.01
 max_distance: 100.0
 gs_batch: 100
 part: [1,2,2]
 
-data_time: "2025-05-09_151825"
-checkpoint_filename: "step-000040003.ckpt"
+data_time: "2026-02-12_113309"
+checkpoint_filename: "step-000299999.ckpt"
 
 bg_img_path: null
 bg_pure_color: [1.0, 1.0, 1.0]
