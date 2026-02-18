@@ -89,7 +89,7 @@ class GsplatRGBOrigin(nn.Module):
             bg_color = torch.zeros((height, width, 3), device=DEVICE)
         self.bg_color = bg_color
 
-    def sort_gauss(self, pose):
+    def sort_gauss(self, pose, tile_bounds):
 
         # Extract Parameters
         fx, fy, width, height = (self.camera_dict[key] for key in ["fx", "fy", "width", "height"])
@@ -265,7 +265,7 @@ class GsplatRGBOrigin(nn.Module):
 
             return colors_combined.squeeze(-2)
         
-    def forward(self, input):
+    def forward(self, input, tile_bounds):
         pose = input
         return self.render_color(pose)
 
@@ -425,7 +425,9 @@ class GsplatRGB(nn.Module):
             pix_coord = pix_coord.unsqueeze(0).to(DEVICE)  # [1, TH, TW, 2]
         else:
             # Use tile_bounds from input for auto_LiRPA bound propagation
-            pix_coord = tile_bounds.view(1, 1, 1, 2).to(DEVICE)
+            # tile_bounds shape: [batch, 2] -> [batch, 1, 1, 2]
+            batch_size = tile_bounds.shape[0]
+            pix_coord = tile_bounds.view(batch_size, 1, 1, 2).to(DEVICE)
 
         # Step 1: Convert from World Coordinates to Camera Coordinates
         means_hom_cam = torch.matmul(pose, means_hom_world[None, :, :].transpose(-1,-2)).transpose(-1,-2)    # [1, N, 4]

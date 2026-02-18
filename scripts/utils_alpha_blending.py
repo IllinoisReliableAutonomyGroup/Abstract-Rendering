@@ -114,16 +114,30 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method, hl, wl,
 
         hl,wl,hu,wu = (net.call_model("get_tile_dict")[key] for key in ["hl", "wl", "hu", "wu"])
 
-        # Combine input bounds with tile bounds (lower with lower, upper with upper)
-        tile_lb = torch.tensor([[hl, wl]], device=input_lb.device, dtype=input_lb.dtype)
-        tile_ub = torch.tensor([[hu, wu]], device=input_ub.device, dtype=input_ub.dtype)
+        # Define tile bounds [w, h] order to match meshgrid indexing='xy'
+        # hu/wu are exclusive upper bounds
+        # Tile-level bounds: pixel coordinates have a range covering the entire tile
+        tile_lb = torch.tensor([[wl, hl]], device=input_lb.device, dtype=input_lb.dtype)
+        tile_ub = torch.tensor([[wu-1, hu-1]], device=input_lb.device, dtype=input_lb.dtype)
+        tile_ref = 0.5 * (tile_lb + tile_ub)  # center of tile
+
+        # Combine input bounds with tile bounds: [1, 5] tensors
+        # The pixel coordinate part now has bounds (a range) instead of exact values
         combined_lb = torch.cat([input_lb, tile_lb], dim=-1)
         combined_ub = torch.cat([input_ub, tile_ub], dim=-1)
-        combined_ref = torch.cat([input_ref, 0.5 * (tile_lb + tile_ub)], dim=-1)
+        combined_ref = torch.cat([input_ref, tile_ref], dim=-1)
+        
+
+        # Debug: print combined bounds
+        # print(f"input_lb: {input_lb}, input_ub: {input_ub}")
+        # print(f"tile_lb: {tile_lb}, tile_ub: {tile_ub}")
+        # print(f"combined_lb: {combined_lb}")
+        # print(f"combined_ub: {combined_ub}")
+        # print(f"combined_ref: {combined_ref}")
 
         ptb = PerturbationLpNorm(x_L=combined_lb, x_U=combined_ub)
         input_ptb = BoundedTensor(combined_ref, ptb)
-
+        
         with torch.no_grad():
             for i, idx_start in enumerate(range(0, N, gs_batch)):
                 idx_end = min(idx_start + gs_batch, N)
@@ -145,10 +159,9 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method, hl, wl,
                     x=(input_ptb,),
                     method="backward",
                     reference_bounds=reference_interm_bounds
-                )  # Output shape: [N] (tile-level bound valid for all pixels)
+                )  # Output shape: [1, num_gauss] (tile-level bounds valid for all pixels)
 
-                # Broadcast tile-level bounds to all pixels in tile
-                # The tile-level bound is valid for all pixels, so we expand it
+                # Broadcast tile-level bounds to all pixels in tile [1, TH, TW, num_gauss, 1]
                 TH, TW = hu - hl, wu - wl
                 num_gauss = idx_end - idx_start
                 alpha_int_lb = alpha_int_lb.view(1, 1, 1, num_gauss, 1).expand(1, TH, TW, num_gauss, 1)
