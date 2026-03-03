@@ -1,0 +1,26 @@
+GateNet train+certify run settings
+timestamp: 20260218_211310
+concrete_samples_json: configs/train_data_new/samples.json
+concrete_image_root: Outputs/RenderedImages/train_data_new/cylinder
+abstract_folder: Outputs/AbstractImages/train_data_new/cylinder
+checkpoint_dir: weights/gatenet/train_data_new
+pretrained_checkpoint: None
+run_datetime: 20260218_205115
+image_width: 32
+image_height: 32
+batch_norm_decay: 0.99
+batch_norm_epsilon: 0.001
+num_epochs: 50
+batch_size_concrete: 19
+batch_size_abstract: 15
+num_workers: 4
+lambda_concrete: 0.8
+lambda_abstract: 0.2
+learning_rate: 0.0001
+weight_decay: 1e-05
+bound_method: backward
+save_every: 5
+use_reinforce: False
+reinforce_noise_std: 0.1
+
+4 layers + patches

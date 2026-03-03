@@ -114,7 +114,29 @@ def input_to_trans(input, base_trans, type, direction=None, radius=None):
                 rad_coeff*radius * torch.cos(angle).unsqueeze(1) * o1.unsqueeze(0) +
                 rad_coeff*radius * torch.sin(angle).unsqueeze(1) * o2.unsqueeze(0)
             )
-            point+=base_trans.unsqueeze(0)
+            point += base_trans.unsqueeze(0)
+
+    elif type == "cuboid":
+        dir_coeff = input[:, 0]  # fraction along trajectory direction, in [0, 1]
+        x_norm    = input[:, 1]  # normalized x offset, in [-1, 1]
+        z_norm    = input[:, 2]  # normalized z offset, in [-1, 1]
+
+        if direction is None:
+            raise ValueError("direction vector must be provided for 'cuboid' type.")
+        if radius is None:
+            raise ValueError("radius ([x_half, z_half]) must be provided for 'cuboid' type.")
+
+        direction = direction.to(input.device)
+        radius = radius.to(input.device)  # shape (2,): [x_half, z_half]
+        x_half, z_half = radius[0], radius[1]
+
+        _, o1, o2 = orthogonal_basis_from_direction(direction)
+        point = (
+            dir_coeff[:, None] * direction[None, :] +
+            (x_norm * x_half)[:, None] * o1[None, :] +
+            (z_norm * z_half)[:, None] * o2[None, :]
+        )
+        point += base_trans[None, :]
 
     return point
 

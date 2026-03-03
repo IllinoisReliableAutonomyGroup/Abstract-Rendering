@@ -124,7 +124,7 @@ def main(setup_dict):
         if save_ref:
             img_ref = np.zeros((height, width,3))
 
-        if odd_type=="cylinder":
+        if odd_type in ("cylinder", "cuboid"):
             input_ref = torch.zeros((1,3)).to(device=DEVICE, dtype=DTYPE)
 
         # Sort Gaussians based on Distance to Camera

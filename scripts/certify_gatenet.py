@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import yaml
 import os,sys
+from datetime import datetime
 
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 sys.path.append(grandfather_path)
@@ -126,13 +127,35 @@ def main(config_path):
     nn_type = config["nn_type"]
     height, width = config["height"], config["width"]
     debug = config["debug"]
+    run_datetime = config.get("run_datetime")
     
     # Define paths
     abstract_dir = Path(f"Outputs/AbstractImages/{case_name}/{odd_type}")
-    ckpt_path = Path(f"weights/{nn_type}/{case_name}/latest.pth")
+
+    # If a specific timestamped run directory is provided, load latest.pth from there.
+    # Otherwise, fall back to the legacy path weights/{nn_type}/{case_name}/latest.pth.
+    if run_datetime is not None:
+        ckpt_dir = Path(f"weights/{nn_type}/{case_name}") / run_datetime
+        ckpt_path = ckpt_dir / "latest.pth"
+    else:
+        ckpt_dir = Path(f"weights/{nn_type}/{case_name}")
+        ckpt_path = ckpt_dir / "latest.pth"
+        print(
+            "[Warning] 'run_datetime' not set in config; "
+            "loading checkpoint from legacy path: " f"{ckpt_path}"
+        )
     output_dir = Path(f"Outputs/Analysis/{case_name}/{odd_type}")
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f"{nn_type}_result.pt"
+
+    # Use run_datetime from config for naming results when available so it
+    # matches the training checkpoint folder (e.g., gatenet_20260208_151343.pt).
+    if run_datetime is not None:
+        result_tag = run_datetime
+    else:
+        # Fallback: use current time if no run_datetime provided.
+        result_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    output_file = output_dir / f"{nn_type}_{result_tag}.pt"
 
     # Load model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

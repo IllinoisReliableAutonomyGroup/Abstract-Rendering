@@ -1,0 +1,32 @@
+bound_method: "forward"
+render_method: "splatfacto"
+case_name: "frog_nerfstudio"
+odd_type: "cylinder"
+save_filename: null
+debug: false
+
+width: 640
+height: 640
+fx: 705
+fy: 705
+eps2d: 15
+
+downsampling_ratio: 20
+tile_size_abstract: 16
+tile_size_render: 24
+min_distance: 0.01
+max_distance: 100.0
+gs_batch: 100
+part: [4,8,8]
+
+data_time: "2026-01-31_232726"
+checkpoint_filename: "step-000299999_pruned_97.ckpt"
+
+bg_img_path: null
+bg_pure_color: [0.0, 0.0, 0.0]
+
+save_ref: true
+save_bound: true
+N_samples: 5
+
+

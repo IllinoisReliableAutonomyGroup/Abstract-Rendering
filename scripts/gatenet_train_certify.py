@@ -13,6 +13,9 @@ import argparse
 from pathlib import Path
 from torchvision import transforms
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+from datetime import datetime
+import copy
 
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 if grandfather_path not in sys.path:
@@ -31,15 +34,17 @@ class ConcreteImageDataset(Dataset):
     """Dataset for concrete (real) images with pose labels"""
     def __init__(self, samples_json, image_root, target_size=(64, 64)):
         with open(samples_json, 'r') as f:
-            self.samples = json.load(f)
+            all_samples = json.load(f)
         self.image_root = image_root
 
         self.transform = transforms.Compose([
             transforms.Resize(target_size),
             transforms.ToTensor(),
         ])
-        
-        print(f"Loaded {len(self.samples)} samples from {samples_json}")
+
+        skipped = sum(1 for s in all_samples if not s.get('include', True))
+        self.samples = [s for s in all_samples if s.get('include', True)]
+        print(f"Loaded {len(self.samples)} samples from {samples_json} ({skipped} skipped — include=False)")
         
     def __len__(self):
         return len(self.samples)
@@ -65,24 +70,34 @@ class AbstractImageDataset(Dataset):
     """Dataset for abstract images with bound information"""
     def __init__(self, abstract_folder, target_size=(64, 64)):
         self.abstract_folder = abstract_folder
-        self.pt_files = sorted([f for f in os.listdir(abstract_folder) if f.endswith('.pt')])
         self.target_size = target_size
 
-        print(f"Found {len(self.pt_files)} abstract .pt files in {abstract_folder}")
-        
+        all_pt_files = sorted([f for f in os.listdir(abstract_folder) if f.endswith('.pt')])
+
+        # Only keep files that have valid lower_rel/upper_rel (GT relative pose bounds)
+        self.pt_files = []
+        skipped = 0
+        for fname in all_pt_files:
+            data = torch.load(os.path.join(abstract_folder, fname), weights_only=False)
+            if data.get('lower_rel') is not None and data.get('upper_rel') is not None:
+                self.pt_files.append(fname)
+            else:
+                skipped += 1
+
+        print(f"Found {len(self.pt_files)} abstract .pt files in {abstract_folder} ({skipped} skipped — no lower_rel/upper_rel)")
+
     def __len__(self):
         return len(self.pt_files)
-    
+
     def __getitem__(self, idx):
         pt_path = os.path.join(self.abstract_folder, self.pt_files[idx])
         data = torch.load(pt_path, weights_only=False)
-        
-        
+
         # Extract data
         lower_img = data['lower']  # [H, W, 3]
         upper_img = data['upper']  # [H, W, 3]
-        X_lower = data['xl']  # [3]
-        X_upper = data['xu']  # [3]
+        X_lower = data['lower_rel']  # [3] GT cuboid lower bound on relative pose
+        X_upper = data['upper_rel']  # [3] GT cuboid upper bound on relative pose
         
         if lower_img.shape[0] != self.target_size[1] or lower_img.shape[1] != self.target_size[0]:
             lower_img = F.interpolate(
@@ -115,11 +130,20 @@ def concrete_loss(predictions, targets):
     return nn.MSELoss()(predictions, targets)
 
 
-def abstract_loss(Y_lower, Y_upper, X_lower, X_upper):
-    """MSE loss for abstract images"""
-    loss_lower = nn.MSELoss()(Y_lower, X_lower)
-    loss_upper = nn.MSELoss()(Y_upper, X_upper)
-    return loss_lower + loss_upper
+def abstract_loss(Y_lower, Y_upper, X_lower, X_upper, tolerance=0.02):
+    """
+    Soundness-preserving loss: X_lower ≤ Y_lower ≤ Y_upper ≤ X_upper
+    tolerance: allowed slack before penalizing violations
+    """
+    violation_lower = torch.relu(X_lower - Y_lower - tolerance).mean()
+
+    # Penalize if Y_upper > X_upper (predicted upper bound should be conservative)
+    violation_upper = torch.relu(Y_upper - X_upper - tolerance).mean()
+
+    # Penalize if Y_lower > Y_upper (invalid interval)
+    bound_validity = torch.relu(Y_lower - Y_upper).mean()
+
+    return violation_lower + violation_upper + 5.0 * bound_validity
 
 
 # ============================================================================
@@ -132,7 +156,7 @@ def crown_propagate(model, lower_img, upper_img, bound_method='forward'):
     """
     img_center = (lower_img + upper_img) / 2.0
     
-    bound_opts = {'conv_mode': 'matrix'}
+    bound_opts = {'conv_mode': 'patches'}
     lirpa_model = BoundedModule(model, img_center, bound_opts=bound_opts, device=DEVICE)
     
     ptb = PerturbationLpNorm(x_L=lower_img, x_U=upper_img)
@@ -140,12 +164,128 @@ def crown_propagate(model, lower_img, upper_img, bound_method='forward'):
     
     # NO torch.no_grad() - forward method supports gradients!
     Y_lower, Y_upper = lirpa_model.compute_bounds(x=(img_ptb,), method=bound_method)
-    
     return Y_lower, Y_upper
+
+# ============================================================================
+# REINFORCE Gradient Estimation
+# ============================================================================
+
+def reinforce_abstract_gradient(model, lower_imgs, upper_imgs, X_lower, X_upper, bound_method='backward', noise_std=0.1):
+    """
+    REINFORCE-style gradient estimation for abstract loss
+    Enables training with abstract bounds without backpropping through CROWN
+    """
+    img_center = (lower_imgs + upper_imgs) / 2.0
+    
+    # Get CROWN bounds in eval mode (detached)
+    with torch.no_grad():
+        model.eval()
+        Y_L_crown, Y_U_crown = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+        loss_a = abstract_loss(Y_L_crown, Y_U_crown, X_lower, X_upper)
+        reward = -loss_a.item()
+        model.train()
+    
+    # Get model's prediction on center image (HAS gradients!)
+    Y_center = model(img_center)
+    
+    # Compute REINFORCE loss with detached CROWN bounds
+    diff_L = (Y_L_crown.detach() - Y_center) / noise_std
+    diff_U = (Y_U_crown.detach() - Y_center) / noise_std
+    
+    log_prob = -0.5 * ((diff_L ** 2).sum() + (diff_U ** 2).sum())
+    reinforce_loss = -reward * log_prob
+    
+    return reinforce_loss, loss_a.item()
 
 # ============================================================================
 # Training Loop
 # ============================================================================
+
+# def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoch):
+#     """Train for one epoch with BOTH concrete and abstract losses"""
+#     model.train()
+    
+#     lambda_concrete = config['lambda_concrete']
+#     lambda_abstract = config['lambda_abstract']
+#     bound_method = config['bound_method']
+    
+#     concrete_iter = iter(concrete_loader)
+#     abstract_iter = iter(abstract_loader)
+    
+#     total_loss = 0.0
+#     total_concrete_loss = 0.0
+#     total_abstract_loss = 0.0
+#     num_steps = 0
+    
+#     num_iters = max(len(concrete_loader), len(abstract_loader))
+#     pbar = tqdm(range(num_iters), desc=f"Epoch {epoch}")
+    
+#     for step in pbar:
+#         loss_c_val = 0.0
+#         loss_a_val = 0.0
+        
+#         # ===== Concrete Loss (separate step) =====
+#         try:
+#             concrete_imgs, concrete_poses = next(concrete_iter)
+#             concrete_imgs = concrete_imgs.to(DEVICE)
+#             concrete_poses = concrete_poses.to(DEVICE)
+            
+#             optimizer.zero_grad()
+#             predictions = model(concrete_imgs)
+#             loss_c = concrete_loss(predictions, concrete_poses)
+#             (lambda_concrete * loss_c).backward()
+#             optimizer.step()
+            
+#             loss_c_val = loss_c.item()
+            
+#         except StopIteration:
+#             concrete_iter = iter(concrete_loader)
+#             loss_c_val = 0.0
+        
+#         # ===== Abstract Loss (separate step) =====
+#         try:
+#             lower_imgs, upper_imgs, X_lowers, X_uppers = next(abstract_iter)
+#             lower_imgs = lower_imgs.to(DEVICE)
+#             upper_imgs = upper_imgs.to(DEVICE)
+#             X_lowers = X_lowers.to(DEVICE)
+#             X_uppers = X_uppers.to(DEVICE)
+            
+#             optimizer.zero_grad()
+            
+#             # Get bounds from CROWN propagation (has gradients!)
+#             Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+            
+#             # Loss: predictions should match ground truth bounds
+#             loss_a = abstract_loss(Y_lower_pred, Y_upper_pred, X_lowers, X_uppers)
+#             (lambda_abstract * loss_a).backward()
+#             optimizer.step()
+            
+#             loss_a_val = loss_a.item()
+            
+#         except StopIteration:
+#             abstract_iter = iter(abstract_loader)
+#             loss_a_val = 0.0
+        
+#         # ===== Logging =====
+#         loss_total_val = lambda_concrete * loss_c_val + lambda_abstract * loss_a_val
+        
+#         total_loss += loss_total_val
+#         total_concrete_loss += loss_c_val
+#         total_abstract_loss += loss_a_val
+#         num_steps += 1
+        
+#         # Update progress bar
+#         pbar.set_postfix({
+#             'loss': f'{loss_total_val:.4f}',
+#             'loss_c': f'{loss_c_val:.4f}',
+#             'loss_a': f'{loss_a_val:.4f}'
+#         })
+    
+#     return {
+#         'total': total_loss / num_steps,
+#         'concrete': total_concrete_loss / num_steps,
+#         'abstract': total_abstract_loss / num_steps
+#     }
 
 def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoch):
     """Train for one epoch with BOTH concrete and abstract losses"""
@@ -154,6 +294,9 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
     lambda_concrete = config['lambda_concrete']
     lambda_abstract = config['lambda_abstract']
     bound_method = config['bound_method']
+    tolerance = config.get('tolerance', 0.02)
+    use_reinforce = config.get('use_reinforce', False)  # New config option
+    noise_std = config.get('reinforce_noise_std', 0.1)  # New config option
     
     concrete_iter = iter(concrete_loader)
     abstract_iter = iter(abstract_loader)
@@ -198,15 +341,21 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
             
             optimizer.zero_grad()
             
-            # Get bounds from CROWN propagation (has gradients!)
-            Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+            if use_reinforce:
+                # REINFORCE method: gradients through Y_center only
+                reinforce_loss, loss_a_val = reinforce_abstract_gradient(
+                    model, lower_imgs, upper_imgs, X_lowers, X_uppers, 
+                    bound_method, noise_std
+                )
+                (lambda_abstract * reinforce_loss).backward()
+            else:
+                # Direct method: gradients through CROWN bounds
+                Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+                loss_a = abstract_loss(Y_lower_pred, Y_upper_pred, X_lowers, X_uppers, tolerance=tolerance)
+                (lambda_abstract * loss_a).backward()
+                loss_a_val = loss_a.item()
             
-            # Loss: predictions should match ground truth bounds
-            loss_a = abstract_loss(Y_lower_pred, Y_upper_pred, X_lowers, X_uppers)
-            (lambda_abstract * loss_a).backward()
             optimizer.step()
-            
-            loss_a_val = loss_a.item()
             
         except StopIteration:
             abstract_iter = iter(abstract_loader)
@@ -221,10 +370,12 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
         num_steps += 1
         
         # Update progress bar
+        method_str = "REINFORCE" if use_reinforce else "Direct"
         pbar.set_postfix({
             'loss': f'{loss_total_val:.4f}',
             'loss_c': f'{loss_c_val:.4f}',
-            'loss_a': f'{loss_a_val:.4f}'
+            'loss_a': f'{loss_a_val:.4f}',
+            'method': method_str
         })
     
     return {
@@ -312,11 +463,32 @@ def main(config):
         lr=config['learning_rate'],
         weight_decay=config['weight_decay']
     )
-    
+
+    # ===== Prepare run directory (timestamped) =====
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_ckpt_dir = config['checkpoint_dir']
+    run_dir = os.path.join(base_ckpt_dir, timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+    print(f"\nCheckpoints, plots, and settings will be saved under: {run_dir}")
+
+    # Save a text summary of the run settings
+    settings_path = os.path.join(run_dir, "run_settings.txt")
+    with open(settings_path, "w") as f:
+        f.write("GateNet train+certify run settings\n")
+        f.write(f"timestamp: {timestamp}\n")
+        for key, value in config.items():
+            f.write(f"{key}: {value}\n")
+    print(f"Run settings saved to: {settings_path}")
+
     # ===== Training Loop =====
     print("\n=== Starting Training ===")
     best_loss = float('inf')
-    
+    best_state_dict = None
+    best_epoch = None
+    total_history = []
+    concrete_history = []
+    abstract_history = []
+
     for epoch in range(1, config['num_epochs'] + 1):
         losses = train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoch)
         
@@ -324,34 +496,35 @@ def main(config):
         print(f"  Total Loss: {losses['total']:.6f}")
         print(f"  Concrete Loss: {losses['concrete']:.6f}")
         print(f"  Abstract Loss: {losses['abstract']:.6f}")
-        
-        # Save checkpoint every N epochs
-        if epoch % config['save_every'] == 0:
-            checkpoint_path = os.path.join(config['checkpoint_dir'], f'checkpoint_epoch_{epoch}.pth')
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': losses['total'],
-                'config': config
-            }, checkpoint_path)
-            print(f"  Saved checkpoint: {checkpoint_path}")
-        
-        # Save best model (also used as latest)
+
+        # Record losses for plotting
+        total_history.append(losses['total'])
+        concrete_history.append(losses['concrete'])
+        abstract_history.append(losses['abstract'])
+
+        # Track best model (by total loss) but do not save until the end
         if losses['total'] < best_loss:
             best_loss = losses['total']
-            best_path = os.path.join(config['checkpoint_dir'], 'latest.pth')
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': best_loss,
-                'config': config
-            }, best_path)
-            print(f"  ✓ New best model saved: {best_path} (loss={best_loss:.6f})")
-    
-    # Save final model
-    final_path = os.path.join(config['checkpoint_dir'], 'final_model.pth')
+            best_state_dict = copy.deepcopy(model.state_dict())
+            best_epoch = epoch
+
+    # If best was never updated (should not happen), fall back to final state
+    if best_state_dict is None:
+        best_state_dict = model.state_dict()
+        best_epoch = config['num_epochs']
+
+    # Save best model (latest) at the end
+    best_path = os.path.join(run_dir, 'latest.pth')
+    torch.save({
+        'epoch': best_epoch,
+        'model_state_dict': best_state_dict,
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': best_loss,
+        'config': config
+    }, best_path)
+
+    # Save final model (last epoch) at the end
+    final_path = os.path.join(run_dir, 'final_model.pth')
     torch.save({
         'epoch': config['num_epochs'],
         'model_state_dict': model.state_dict(),
@@ -361,7 +534,26 @@ def main(config):
     }, final_path)
     print(f"\n=== Training Complete ===")
     print(f"Final model saved: {final_path}")
-    print(f"Best model (loss={best_loss:.6f}): {best_path}")
+    print(f"Best model (epoch={best_epoch}, loss={best_loss:.6f}): {best_path}")
+
+    # ===== Plot loss curves over epochs =====
+    epochs = list(range(1, config['num_epochs'] + 1))
+    plt.figure()
+    eps = 1e-8
+    plt.plot(epochs, [max(v, eps) for v in total_history], label='total loss')
+    plt.plot(epochs, [max(v, eps) for v in concrete_history], label='concrete loss')
+    plt.plot(epochs, [max(v, eps) for v in abstract_history], label='abstract loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss (log scale)')
+    plt.yscale('log')
+    plt.title('Training losses (log scale)')
+    plt.legend()
+
+    plot_filename = f"{config['bound_method']}_lambda{config['lambda_concrete']}.png"
+    plot_path = os.path.join(run_dir, plot_filename)
+    plt.savefig(plot_path, bbox_inches='tight')
+    plt.close()
+    print(f"Loss curves saved: {plot_path}")
 
 
 # ============================================================================

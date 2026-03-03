@@ -12,10 +12,33 @@ from utils_transform import orthogonal_basis_from_direction
 from matplotlib import cm
 from matplotlib.colors import LinearSegmentedColormap
 
-def load_analysis_results(case_name, odd_type, nn_type):
-    result_path = Path(f"Outputs/Analysis/{case_name}/{odd_type}/{nn_type}_result.pt")
+
+def load_analysis_results(case_name, odd_type, nn_type, run_datetime=None):
+    """Load GateNet analysis results.
+
+    If run_datetime is provided, we expect a timestamped file produced by
+    certify_gatenet.py under:
+      Outputs/Analysis/<case_name>/<odd_type>/<nn_type>_<run_datetime>.pt
+
+    Otherwise we fall back to the legacy, non-timestamped name:
+      Outputs/Analysis/<case_name>/<odd_type>/<nn_type}_result.pt
+    """
+    if run_datetime is not None:
+        result_path = Path(
+            f"Outputs/Analysis/{case_name}/{odd_type}/{nn_type}_{run_datetime}.pt"
+        )
+    else:
+        result_path = Path(
+            f"Outputs/Analysis/{case_name}/{odd_type}/{nn_type}_result.pt"
+        )
+
     if not result_path.exists():
-        raise FileNotFoundError(f"Result file not found at {result_path}")
+        raise FileNotFoundError(
+            f"Result file not found at {result_path}. "
+            "If you are using timestamped certify outputs, make sure "
+            "'run_datetime' in your gatenet.yml matches the folder/filename."
+        )
+
     return torch.load(result_path)
 
 def generate_gate_circle(point, tangent, outer_radius=0.2, height=0.1, num_points=100, num_slices=5):
@@ -135,6 +158,44 @@ def plot_filled_cylinder_fast(
             label=label
         )
 
+def plot_filled_cuboid_fast(ax, base, direction, radius, xl, xu, color, label=None):
+    """Plot a filled cuboid (box) in 3D space for the cuboid perturbation type."""
+    d_l, xn_l, zn_l = xl
+    d_u, xn_u, zn_u = xu
+    x_half, z_half = radius
+
+    base_t = torch.as_tensor(base, dtype=torch.float32)
+    direction_t = torch.as_tensor(direction, dtype=torch.float32)
+    _, o1, o2 = orthogonal_basis_from_direction(direction_t)
+
+    def corner(d, xn, zn):
+        pt = base_t + d * direction_t + (xn * x_half) * o1 + (zn * z_half) * o2
+        return pt.numpy()
+
+    faces = [
+        [[corner(d_l, xn_l, zn_l), corner(d_l, xn_u, zn_l)],
+         [corner(d_l, xn_l, zn_u), corner(d_l, xn_u, zn_u)]],
+        [[corner(d_u, xn_l, zn_l), corner(d_u, xn_u, zn_l)],
+         [corner(d_u, xn_l, zn_u), corner(d_u, xn_u, zn_u)]],
+        [[corner(d_l, xn_l, zn_l), corner(d_u, xn_l, zn_l)],
+         [corner(d_l, xn_l, zn_u), corner(d_u, xn_l, zn_u)]],
+        [[corner(d_l, xn_u, zn_l), corner(d_u, xn_u, zn_l)],
+         [corner(d_l, xn_u, zn_u), corner(d_u, xn_u, zn_u)]],
+        [[corner(d_l, xn_l, zn_l), corner(d_u, xn_l, zn_l)],
+         [corner(d_l, xn_u, zn_l), corner(d_u, xn_u, zn_l)]],
+        [[corner(d_l, xn_l, zn_u), corner(d_u, xn_l, zn_u)],
+         [corner(d_l, xn_u, zn_u), corner(d_u, xn_u, zn_u)]],
+    ]
+
+    for fi, face in enumerate(faces):
+        face_np = np.array(face)  # (2, 2, 3)
+        ax.plot_surface(
+            face_np[:, :, 0], face_np[:, :, 1], face_np[:, :, 2],
+            color=color, alpha=0.2, linewidth=0, antialiased=False,
+            label=label if (fi == 0 and label is not None) else None
+        )
+
+
 def plot_gate_poses(ax, gate_poses, gate_radius=0.5):
     """
     Plot gate poses as circles in 3D space.
@@ -153,6 +214,7 @@ def plot_gate_poses(ax, gate_poses, gate_radius=0.5):
 
 from matplotlib.patches import Patch
 
+
 def main(config_path, traj_path):
     # Load configuration
     with open(config_path, "r") as f:
@@ -164,14 +226,15 @@ def main(config_path, traj_path):
     threshold = np.array(config["threshold"])
     debug = config["debug"]
     show_details = config.get("show_details", False)  # Read the new variable
+    run_datetime = config.get("run_datetime")
 
     # Load trajectory data
     with open(traj_path, "r") as f:
         traj_data = yaml.safe_load(f)
     gate_poses = traj_data["gate_poses"]
 
-    # Load analysis results
-    results = load_analysis_results(case_name, odd_type, nn_type)
+    # Load analysis results (match certify_gatenet's timestamped output when provided)
+    results = load_analysis_results(case_name, odd_type, nn_type, run_datetime)
     points = results["point"].numpy()
     directions = results["direction"].numpy()
     radii = results["radius"].numpy()
@@ -236,8 +299,11 @@ def main(config_path, traj_path):
         if debug:
             print(f"Point {i}: bounds_diff = {bounds_diff[i]}, color = {color}")
 
-        # Plot the cylinder
-        plot_filled_cylinder_fast(ax, base, direction, radius, coeff_lb, coeff_ub, color=color)
+        # Plot the perturbation region
+        if odd_type == "cuboid":
+            plot_filled_cuboid_fast(ax, base, direction, radius, coeff_lb, coeff_ub, color=color)
+        else:
+            plot_filled_cylinder_fast(ax, base, direction, radius, coeff_lb, coeff_ub, color=color)
 
     # Plot gate poses
     plot_gate_poses(ax, gate_poses, gate_radius=0.5)
@@ -250,10 +316,13 @@ def main(config_path, traj_path):
     ax.set_box_aspect([1, 1, (z_limits[1] - z_limits[0]) / 3])
 
     # Do not show color bar
-    # Save the figure
+    # Save the figure (timestamped if run_datetime is provided)
     output_dir = Path(f"Outputs/Analysis/{case_name}/{odd_type}/")
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / "certification_visualization.png"
+    if run_datetime is not None:
+        output_file = output_dir / f"certification_visualization_{run_datetime}.png"
+    else:
+        output_file = output_dir / "certification_visualization.png"
     plt.savefig(output_file, dpi=200, bbox_inches="tight")
     print(f"Figure saved to {output_file}")
 
