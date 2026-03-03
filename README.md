@@ -35,8 +35,6 @@ Download the repository from GitHub and remove the bundled `auto_LiRPA` folder (
 ```bash
 cd ~
 git clone --branch master https://github.com/IllinoisReliableAutonomyGroup/Abstract-Rendering.git
-cd ~/Abstract-Rendering
-rm -rf auto_LiRPA
 ```
 
 ### 2. Install auto_LiRPA
@@ -45,6 +43,7 @@ Install the neural network verification library *auto_LiRPA*, and symbolic link 
 cd ~
 git clone --branch master https://github.com/Verified-Intelligence/auto_LiRPA.git
 cd ~/Abstract-Rendering
+rm -rf auto_LiRPA
 ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
 ```
 
