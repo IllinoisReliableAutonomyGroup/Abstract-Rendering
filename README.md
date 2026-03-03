@@ -107,10 +107,11 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
     -p 8080:8080 \
     -v "$HOME/Abstract-Rendering":/workspace/Abstract-Rendering \
     -v "$HOME/auto_LiRPA":"$HOME/auto_LiRPA" \
+    -v "$HOME/.cache/docker-abstract":/root/.cache \
     abstract-rendering:latest \
     /bin/bash
   ```
-  The first `-v` makes your local Abstract-Rendering repository visible at `/workspace/Abstract-Rendering` inside the container. The second `-v` mounts your `~/auto_LiRPA` clone at the same absolute path inside the container so that the `auto_LiRPA` symlink in this repo continues to resolve and the code uses your local auto_LiRPA version.
+  The first `-v` makes your local Abstract-Rendering repository visible at `/workspace/Abstract-Rendering` inside the container. The second `-v` mounts your `~/auto_LiRPA` clone at the same absolute path inside the container so that the `auto_LiRPA` symlink in this repo continues to resolve and the code uses your local auto_LiRPA version. The third `-v` persists the CUDA kernel cache across container restarts — without it, gsplat recompiles CUDA kernels every time you start a new container (2–3 min overhead).
 - **Inside the container**: Once the container starts, run
   ```bash
   cd /workspace/Abstract-Rendering
