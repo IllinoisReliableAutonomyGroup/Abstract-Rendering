@@ -69,7 +69,7 @@ nerfstudio/outputs/
                 └── step-000XXXXXX.ckpt
 ```
 
-For example, the U-turn scene used in this repository sits at:
+For example, the train_data_new scene used in this repository sits at:
 
 ```
 nerfstudio/outputs/train_data_new/splatfacto/2025-05-09_151825/
