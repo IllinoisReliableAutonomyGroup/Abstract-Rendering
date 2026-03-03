@@ -21,22 +21,17 @@ class GateNet(nn.Module):
         self.conv5 = nn.Conv2d(16, 16, kernel_size=3, padding=1, bias=True)
         self.bn5 = nn.BatchNorm2d(16, momentum=config['batch_norm_decay'], eps=config['batch_norm_epsilon'])
 
-        self.conv6 = nn.Conv2d(16, 16, kernel_size=3, padding=1, bias=True)
-        self.bn6 = nn.BatchNorm2d(16, momentum=config['batch_norm_decay'], eps=config['batch_norm_epsilon'])
-
         self.flatten = nn.Flatten()
 
-        # print(config['input_shape'])
         res = self.conv(torch.zeros(config['input_shape'])[None])
-        # print(res.shape[1])
         self.fc = nn.Linear(res.shape[1], int(torch.prod(torch.tensor(config['output_shape']))))
 
     def conv(self, x):
-        x = F.relu(self.bn1(self.conv1(x))) # 64
-        x = F.avg_pool2d(x, kernel_size=2)
+        x = F.relu(self.bn1(self.conv1(x)))  # 32
+        x = F.avg_pool2d(x, kernel_size=2)   # → 16
 
-        x = F.relu(self.bn2(self.conv2(x))) # 32
-        x = F.avg_pool2d(x, kernel_size=2)
+        x = F.relu(self.bn2(self.conv2(x)))  # 16
+        x = F.avg_pool2d(x, kernel_size=2)   # → 8
 
         x = F.relu(self.bn3(self.conv3(x))) # 16
         x = F.avg_pool2d(x, kernel_size=2)
@@ -44,13 +39,8 @@ class GateNet(nn.Module):
         x = F.relu(self.bn4(self.conv4(x))) # 8
         x = F.avg_pool2d(x, kernel_size=2)
 
-        x = F.relu(self.bn5(self.conv5(x))) # 4
-        x = F.avg_pool2d(x, kernel_size=2)
-
-
-        x = F.relu(self.bn6(self.conv6(x)))  # No pooling after conv6  # 2
-
-        x = self.flatten(x)
+        x = F.relu(self.bn5(self.conv5(x))) # 8
+        x = self.flatten(x)  # [batch, 16*2*2] = [batch, 64]
 
         return x
 
