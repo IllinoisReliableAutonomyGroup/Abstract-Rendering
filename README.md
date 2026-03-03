@@ -56,7 +56,18 @@ cd ~/Abstract-Rendering
 mkdir -p nerfstudio/outputs
 ```
 
-Then place the downloaded scene folders inside so the structure looks like:
+After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `train_data_new`):
+
+```bash
+export case_name=train_data_new
+
+cd ~/Downloads
+unzip ${case_name}_*.zip
+
+mv ${case_name} ~/Abstract-Rendering/nerfstudio/outputs/
+```
+
+The final directory structure should look like:
 
 ```
 nerfstudio/outputs/
@@ -69,7 +80,7 @@ nerfstudio/outputs/
                 └── step-000XXXXXX.ckpt
 ```
 
-For example, the train_data_new scene used in this repository sits at:
+For example, the U-turn scene used in this repository sits at:
 
 ```
 nerfstudio/outputs/train_data_new/splatfacto/2025-05-09_151825/
