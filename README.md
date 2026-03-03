@@ -104,6 +104,7 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
   ```bash
   cd ~/Abstract-Rendering
   docker run --gpus all -it --rm \
+    -p 8080:8080 \
     -v "$HOME/Abstract-Rendering":/workspace/Abstract-Rendering \
     -v "$HOME/auto_LiRPA":"$HOME/auto_LiRPA" \
     abstract-rendering:latest \
