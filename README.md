@@ -49,13 +49,33 @@ ln -s ~/auto_LiRPA/auto_LiRPA auto_LiRPA
 ```
 
 ### 3. Download Scene Data
-You may either use your existing Nerfstudio data or download the pre-reconstructed [Nerfstudio scenes](https://drive.google.com/drive/folders/1koY1TL30Bty2x0U6VpszKRgMXk61oTkG?usp=drive_link) and place them in the below dictionary structure.
+You may either use your existing Nerfstudio data or download the pre-reconstructed [Nerfstudio scenes](https://drive.google.com/drive/folders/1koY1TL30Bty2x0U6VpszKRgMXk61oTkG?usp=drive_link). First create the output directory:
 
 ```bash
-~/Abstract-Rendering/nerfstudio/outputs/${case_name}/${reconstruction_method}/${datatime}/...
+cd ~/Abstract-Rendering
+mkdir -p nerfstudio/outputs
 ```
 
-Below is visualization of scene *circle*.
+Then place the downloaded scene folders inside so the structure looks like:
+
+```
+nerfstudio/outputs/
+└── ${case_name}/
+    └── ${reconstruction_method}/
+        └── ${data_time}/
+            ├── config.yml
+            ├── dataparser_transforms.json
+            └── nerfstudio_models/
+                └── step-000XXXXXX.ckpt
+```
+
+For example, the U-turn scene used in this repository sits at:
+
+```
+nerfstudio/outputs/train_data_new/splatfacto/2025-05-09_151825/
+```
+
+Below is a visualization of scene *circle*.
 ![](figures/scene_circle.png)
 
 ### 4. Run via Docker
