@@ -13,3 +13,5 @@ nerfstudio/
 Outputs/
 
 backups/nerfstudio/outputs/
+weights/
+*.pth
