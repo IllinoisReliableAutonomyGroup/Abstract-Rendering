@@ -38,17 +38,21 @@ class SumCumProdModel(nn.Module):
 
     def forward(self, alpha):
         B, N = alpha.shape
-        running = torch.ones(B, 1, device=alpha.device)
+        log_one_minus_alpha = torch.log(1 - alpha)   # (B, N)
+
+        running = torch.zeros(B, 1, device=alpha.device)
         prefix_list = []
         for i in range(N):
             prefix_list.append(running)
-            running = running * (1 - alpha[:, i:i+1])
-        prefix = torch.cat(prefix_list, dim=1)  # (B, N)
+            running = running + log_one_minus_alpha[:, i:i+1]
+
+        prefix = torch.cat(prefix_list, dim=1)        # (B, N)
+        prefix = -torch.relu(-prefix)                  # clamp ≤ 0
+        prefix = torch.exp(prefix)                     # (B, N)
 
         alpha = torch.relu(alpha)
         color = torch.relu(self.colors)
-        # prefix and alpha are (B, N), color is (B, N, 3)
-        return torch.sum(prefix.unsqueeze(-1) * alpha.unsqueeze(-1) * color, dim=1)  # (B, 3)
+        return torch.sum(prefix.unsqueeze(-1) * alpha.unsqueeze(-1) * color, dim=1)
 
 def alpha_blending(alpha, colors, method, triu_mask=None):
 
