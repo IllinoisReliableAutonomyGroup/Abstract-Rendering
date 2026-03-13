@@ -413,28 +413,82 @@ def main(setup_dict):
 
         global_label_offset += len(masks)
 
-    # ---- Phase 2: Consolidate labels via majority vote ----
-    # Each Gaussian was assigned a global label from each view it appeared in.
-    # We pick the label that was assigned most frequently (majority vote).
-    # Then we cluster: Gaussians sharing the same global label are the same object.
-    print("\n=== Phase 2: Consolidating labels ===")
+    # ---- Phase 2: Consolidate labels via co-occurrence merging ----
+    # Labels from different views that share many Gaussians must be the same object.
+    # We merge them via union-find on label pairs, gated by spatial proximity and size ratio.
+    print("\n=== Phase 2: Consolidating labels via co-occurrence ===")
 
-    from collections import Counter
+    from collections import Counter, defaultdict
+
+    # Step 1: Build co-occurrence counts between label pairs
+    label_cooccurrence = defaultdict(int)
+    for orig_idx, glabels in gaussian_global_labels.items():
+        unique_glabels = list(set(glabels))
+        for i in range(len(unique_glabels)):
+            for j in range(i + 1, len(unique_glabels)):
+                a, b = min(unique_glabels[i], unique_glabels[j]), max(unique_glabels[i], unique_glabels[j])
+                label_cooccurrence[(a, b)] += 1
+
+    print(f"  Found {len(label_cooccurrence)} label pairs with shared Gaussians")
+
+    # Step 2: Compute centroids and sizes per global label for gating
+    label_gaussians = defaultdict(list)
+    for orig_idx, glabels in gaussian_global_labels.items():
+        for gl in set(glabels):
+            label_gaussians[gl].append(orig_idx)
+
+    label_centroids = {}
+    label_sizes = {}
+    for gl, gauss_list in label_gaussians.items():
+        positions = means[gauss_list]
+        label_centroids[gl] = positions.mean(dim=0)
+        label_sizes[gl] = len(gauss_list)
+
+    # Step 3: Union-find with tight spatial + size gating
+    parent = {}
+    def find(x):
+        if x not in parent:
+            parent[x] = x
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        px, py = find(x), find(y)
+        if px != py:
+            parent[px] = py
+
+    min_shared = 20        # only merge labels sharing at least 20 Gaussians
+    max_centroid_dist = 0.2  # tight spatial gate
+    max_size_ratio = 10.0    # don't merge if one label has 10x more Gaussians
+    merge_count = 0
+    for (a, b), count in label_cooccurrence.items():
+        if count >= min_shared:
+            dist = torch.norm(label_centroids[a] - label_centroids[b]).item()
+            size_a, size_b = label_sizes[a], label_sizes[b]
+            ratio = max(size_a, size_b) / max(min(size_a, size_b), 1)
+            if dist < max_centroid_dist and ratio < max_size_ratio:
+                union(a, b)
+                merge_count += 1
+
+    print(f"  Merged {merge_count} label pairs (min_shared={min_shared}, max_dist={max_centroid_dist}, max_ratio={max_size_ratio})")
+
+    # Step 4: Assign each Gaussian its merged label
     labels = -1 * torch.ones(gauss_num, dtype=torch.int64)
     for orig_idx, glabels in gaussian_global_labels.items():
-        # Pick the most common global label across views
-        most_common = Counter(glabels).most_common(1)[0][0]
+        roots = [find(gl) for gl in glabels]
+        most_common = Counter(roots).most_common(1)[0][0]
         labels[orig_idx] = most_common
 
     num_labeled = (labels >= 0).sum().item()
     unique_labels_pre = torch.unique(labels[labels >= 0])
     num_objects_pre = len(unique_labels_pre)
-    print(f"Labeled {num_labeled}/{gauss_num} Gaussians into {num_objects_pre} objects (before merge)")
+    print(f"Labeled {num_labeled}/{gauss_num} Gaussians into {num_objects_pre} objects (before spatial merge)")
 
     # Merge small objects into nearest large neighbor in 3D
-    # Iteratively merge small objects until stable
     for merge_round in range(3):
-        labels = merge_small_objects(labels, means, min_object_size=2000, merge_distance=1.0)
+        labels = merge_small_objects(labels, means, min_object_size=100, merge_distance=0.3)
     unique_labels = torch.unique(labels[labels >= 0])
     num_objects = len(unique_labels)
     print(f"After spatial merge: {num_objects} objects (merged {num_objects_pre - num_objects} small objects)")

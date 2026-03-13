@@ -233,6 +233,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Abstract Gsplat with YAML configuration.")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
     parser.add_argument("--odd", type=str, required=True, help="Path to the YAML configuration file.")
+    parser.add_argument("--segment_file", type=str, default=None,
+                        help="Path to cluster_assignments.pt to use segment colors instead of scene colors.")
     args = parser.parse_args()
 
     # Load parameters from YAML file
@@ -277,6 +279,7 @@ if __name__ == '__main__':
         
         "poses": [odd["pose"] for odd in odd_file],
         "radiuss": [odd["radius"] if "radius" in odd else None for odd in odd_file],
+        "segment_file": args.segment_file,
     }
 
     start_time = time.time()
