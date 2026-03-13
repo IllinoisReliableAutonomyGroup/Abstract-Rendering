@@ -38,7 +38,8 @@ class SumCumProdModel(nn.Module):
 
     def forward(self, alpha):
         B, N = alpha.shape
-        log_one_minus_alpha = torch.log(1 - alpha)   # (B, N)
+        one_minus_alpha = torch.relu(1 - alpha - 1e-6) + 1e-6  # clamp min=1e-6, LiRPA-safe
+        log_one_minus_alpha = torch.log(one_minus_alpha)   # (B, N)
 
         running = torch.zeros(B, 1, device=alpha.device)
         prefix_list = []
