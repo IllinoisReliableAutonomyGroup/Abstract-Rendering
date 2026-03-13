@@ -11,7 +11,7 @@ fx: 216
 fy: 216
 eps2d: 8.0
 
-downsampling_ratio: 8
+downsampling_ratio: 2
 tile_size_abstract: 8
 tile_size_render: 24
 min_distance: 0.01
@@ -20,7 +20,7 @@ gs_batch: 20
 part: [1, 2, 2]
 
 data_time: "2026-01-31_235019"
-checkpoint_filename: "step-000299999-pruned95.ckpt"
+checkpoint_filename: "step-000299999.ckpt"
 
 bg_img_path: null
 bg_pure_color: [0.0, 1.0, 0.0]
