@@ -84,6 +84,19 @@ def main(setup_dict):
 
     assert torch.all((opacities>=0) & (opacities<=1))
 
+    # Optional: Replace Gaussian colors with segmentation colors
+    segment_file = setup_dict.get("segment_file")
+    if segment_file is not None:
+        seg_data = torch.load(segment_file, weights_only=False)
+        seg_labels = seg_data["labels"]
+        seg_colors = seg_data["cluster_colors"]
+        new_colors = torch.full_like(colors, 0.5)  # default gray for unlabeled
+        labeled_mask = seg_labels >= 0
+        new_colors[labeled_mask] = seg_colors[seg_labels[labeled_mask].long()].to(DEVICE)
+        colors = new_colors
+        num_segs = len(torch.unique(seg_labels[labeled_mask]))
+        print(f"Applied segmentation colors: {num_segs} segments from {segment_file}")
+
     # Define camera_dict
     camera_dict = {
         "fx": fx,
