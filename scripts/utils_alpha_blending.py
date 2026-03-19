@@ -140,7 +140,11 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
     bg_color = net.call_model("get_bg_color_tile").unsqueeze(0).unsqueeze(-2)  # (1, TH, TW, 1, 3)
 
     if N == 0:
-        return bg_color.squeeze(-2), bg_color.squeeze(-2)
+        bg = bg_color.squeeze(-2)  # (1, TH, TW, 3)
+        input_dim = input_ref.shape[-1]
+        TH, TW = bg.shape[1], bg.shape[2]
+        zero_A = torch.zeros(1, TH, TW, 3, input_dim, device=bg.device)
+        return bg, bg, zero_A, zero_A, bg.clone(), bg.clone()
 
     # ── STEP 1: Extract linear bounds of α (per GS batch) from auto_LiRPA ──
     alphas_lA = []
@@ -271,10 +275,48 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
 
         # STEP 5: CROWN backward → A_blend; PerturbationLinear.concretize
         # composes A_blend with lA/uA and concretizes against camera bounds.
-        pixel_lb, pixel_ub = bounded_blend.compute_bounds(
-            x=(alpha_ptb,), method="backward"
+        # Also extract A matrices for linear bounds on pixel color.
+        required_A_blend = defaultdict(set)
+        required_A_blend[bounded_blend.output_name[0]].add(bounded_blend.input_name[0])
+
+        pixel_lb, pixel_ub, A_dict_blend = bounded_blend.compute_bounds(
+            x=(alpha_ptb,), method="backward",
+            return_A=True,
+            needed_A_dict=required_A_blend,
         )
         # pixel_lb, pixel_ub: (TH*TW, 3)
+
+        # Extract blend-level A matrices: pixel_color w.r.t. alpha
+        A_blend_entry = A_dict_blend[bounded_blend.output_name[0]][bounded_blend.input_name[0]]
+        blend_lA    = A_blend_entry['lA'].detach()      # (TH*TW, 3, N_total)
+        blend_uA    = A_blend_entry['uA'].detach()
+        blend_lbias = A_blend_entry['lbias'].detach()    # (TH*TW, 3)
+        blend_ubias = A_blend_entry['ubias'].detach()
+
+        # ── STEP 5b: Compose blend-level A (pixel→alpha) with alpha-level A (alpha→x) ──
+        # blend_lA: (TH*TW, 3, N_total), full_lA: (TH*TW, N_total, input_dim)
+        # Result: composite_lA: (TH*TW, 3, input_dim)
+        # Split into positive and negative parts for correct bound composition
+        blend_lA_pos = torch.clamp(blend_lA, min=0)
+        blend_lA_neg = torch.clamp(blend_lA, max=0)
+        blend_uA_pos = torch.clamp(blend_uA, min=0)
+        blend_uA_neg = torch.clamp(blend_uA, max=0)
+
+        # Lower bound: pos*lower + neg*upper
+        composite_lA = torch.bmm(blend_lA_pos, full_lA) + torch.bmm(blend_lA_neg, full_uA)
+        composite_lbias = blend_lbias + torch.bmm(blend_lA_pos, full_lbias.unsqueeze(-1)).squeeze(-1) \
+                          + torch.bmm(blend_lA_neg, full_ubias.unsqueeze(-1)).squeeze(-1)
+
+        # Upper bound: pos*upper + neg*lower
+        composite_uA = torch.bmm(blend_uA_pos, full_uA) + torch.bmm(blend_uA_neg, full_lA)
+        composite_ubias = blend_ubias + torch.bmm(blend_uA_pos, full_ubias.unsqueeze(-1)).squeeze(-1) \
+                          + torch.bmm(blend_uA_neg, full_lbias.unsqueeze(-1)).squeeze(-1)
+
+        # Reshape to tile shape: (TH*TW, 3, input_dim) → (1, TH, TW, 3, input_dim)
+        composite_lA = composite_lA.reshape(1, TH, TW, 3, input_dim)
+        composite_uA = composite_uA.reshape(1, TH, TW, 3, input_dim)
+        composite_lbias = composite_lbias.reshape(1, TH, TW, 3)
+        composite_ubias = composite_ubias.reshape(1, TH, TW, 3)
 
         img_lb = pixel_lb.reshape(1, TH, TW, 3)
         img_ub = pixel_ub.reshape(1, TH, TW, 3)
@@ -282,5 +324,5 @@ def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
         del bounded_blend
         torch.cuda.empty_cache()
 
-    # ── STEP 6: Return image bounds ──
-    return img_lb, img_ub
+    # ── STEP 6: Return image bounds (interval + linear) ──
+    return img_lb, img_ub, composite_lA, composite_uA, composite_lbias, composite_ubias
