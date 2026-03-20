@@ -280,11 +280,6 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 
 ![Viser Visualization](figures/vis_plane.png)
 
-| Flag | Effect |
-|---|---|
-| `--opacity 0.2` | Make cuboids more transparent (default `0.35`) |
-| `--no-cuboids` | Show scene only, skip CROWN overlay |
-| `--port 8081` | Change viewer port if 8080 is in use |
 
 **Useful flags:**
 
