@@ -188,59 +188,58 @@ violations; blue indicates gates.
 ---
 ### Set-Valued Training
 
-This section describes how to train GateNet on **abstract (set-valued) images** — i.e., the per-pixel lower/upper bound images produced by the abstract renderer. Training on these bounds teaches the network to make certifiably correct predictions across an entire pose cell, not just at a single point.
+Train GateNet on **abstract (set-valued) images** — per-pixel lower/upper bound images produced by the abstract renderer — for certifiably correct pose estimation across entire pose cells.
 
-#### 1. Prepare the data
+#### 1. Run Abstract Gsplat Pose Estimation
 
-**Abstract images (cuboid partition):**
-
-Create the expected output directory structure and download the pre-computed abstract images:
+Partitions the ODD into cuboid cells, runs abstract rendering, and saves per-cell relative pose bounds (lower/upper w.r.t. the reference point) used for training and certification.
 
 ```bash
-mkdir -p ~/Abstract-Rendering/Outputs/AbstractImages/train_data_new/cuboid
+cd ~/Abstract-Rendering
+export case_name=train_data_new
+python3 scripts/abstract_gsplat_pose_estimation.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
 ```
 
-Download the `cuboid` folder from [Google Drive](https://drive.google.com/drive/folders/1koY1TL30Bty2x0U6VpszKRgMXk61oTkG?usp=drive_link) and place its contents at:
+Output: `Outputs/AbstractImages/${case_name}/cuboid/`
+
+---
+
+#### 2. Prepare the data
+
+Download pre-computed abstract images from [Google Drive](https://drive.google.com/drive/u/2/folders/1jWmVoXZKHr2ds9ObGoWNHWzfFTKjlJs3) and place under:
 
 ```
-~/Abstract-Rendering/Outputs/AbstractImages/train_data_new/cuboid/
+~/Abstract-Rendering/Outputs/AbstractImages/${case_name}/cuboid/
 ```
 
-Each `.pt` file in this folder is one abstract image record containing the lower/upper bound image pair and the corresponding pose-cell geometry.
-
-**U-turn scene data (for visualization):**
-
-Download the U-turn dataset and place it at:
+For the Nerfstudio viewer, also download the U-turn dataset and place at:
 
 ```
 ~/Abstract-Rendering/data/uturn/
 ```
 
-The folder must contain at minimum `transforms.json` and an `images/` subdirectory with the captured frames.
-
 ---
 
-#### 2. Configure `train_certify_config.yml`
+#### 3. Configure `train_certify_config.yml`
 
-Open `configs/${case_name}/train_certify_config.yml` (e.g. `configs/train_data_new/train_certify_config.yml`) and set the following fields before training:
+Set the following fields in `configs/${case_name}/train_certify_config.yml`:
 
 | Parameter | Description |
 |---|---|
-| `abstract_folder` | Path to the folder of `.pt` abstract image files (from step 1 above) |
-| `concrete_image_root` | Path to concrete rendered images (used for the concrete loss term) |
-| `checkpoint_dir` | Where trained GateNet weights will be saved |
-| `image_width` / `image_height` | Input resolution — must match the abstract images (default `32×32`) |
-| `num_epochs` | Total training epochs (default `65`; increase for better convergence) |
-| `batch_size_concrete` | Batch size for concrete images (reduce if GPU OOM) |
-| `batch_size_abstract` | Batch size for abstract images (reduce if GPU OOM) |
-| `lambda_concrete` / `lambda_abstract` | Loss weights for concrete vs abstract terms — they should sum to 1.0 |
-| `tolerance` | Parameter for allowed error in pose estimation (default `0.25`) |
+| `abstract_folder` | Path to cuboid `.pt` abstract image files |
+| `concrete_image_root` | Path to concrete rendered images |
+| `checkpoint_dir` | Where trained GateNet weights are saved |
+| `image_width` / `image_height` | Must match abstract images (default `32×32`) |
+| `num_epochs` | Training epochs (default `65`) |
+| `batch_size_concrete` / `batch_size_abstract` | Reduce if GPU OOM |
+| `lambda_concrete` / `lambda_abstract` | Loss weights — must sum to 1.0 |
+| `tolerance` | Allowed pose estimation error (default `0.25`) |
 | `learning_rate` | Adam learning rate (default `0.0005`) |
 | `weight_decay` | L2 regularisation (default `0.00001`) |
-| `bound_method` | CROWN bounding method — `"backward"` (CROWN) is the default and recommended |
-| `save_every` | Save a checkpoint every N epochs |
+| `bound_method` | CROWN method — `"backward"` recommended |
+| `save_every` | Save checkpoint every N epochs |
 
-#### 3. Train
+#### 4. Train
 
 ```bash
 cd ~/Abstract-Rendering
@@ -248,43 +247,25 @@ export case_name=train_data_new
 python3 scripts/gatenet_train_certify.py --config configs/${case_name}/train_certify_config.yml
 ```
 
-Weights are saved to `checkpoint_dir` with a timestamp sub-folder. Note the `run_datetime` printed at the start — you will need it in the next step.
+Note the `run_datetime` printed at the start — needed for certification.
 
 ---
 
 ### Test GateNet on Abstract Images (CROWN Certification)
 
-After training, run formal CROWN certification to check which pose cells are provably certified.
-
-#### 1. Update the config
-
-In `configs/${case_name}/train_certify_config.yml`, set:
-
-| Parameter | What to put |
-|---|---|
-| `run_datetime` | The timestamp of the training run you want to evaluate (e.g. `"20260226_144648"`) — this selects which checkpoint folder inside `checkpoint_dir` to load from |
-| `tolerance` | Certification tolerance — increase slightly if too few cells certify, decrease for a tighter guarantee |
-
-#### 2. Run
+Set `run_datetime` and `tolerance` in `configs/${case_name}/train_certify_config.yml`, then run:
 
 ```bash
 cd ~/Abstract-Rendering
+export case_name=train_data_new
 python3 scripts/test_gatenet_abstract.py \
-    --config configs/train_data_new/train_certify_config.yml \
-    --traj configs/train_data_new/traj.yaml
+    --config configs/${case_name}/train_certify_config.yml \
+    --traj configs/${case_name}/traj.yaml
 ```
-
-The script loads the `latest.pth` checkpoint from the run identified by `run_datetime`, runs CROWN on every abstract image in `abstract_folder`, and prints a summary of certified vs violated cells.
 
 ---
 
 ### Visualize Certification in the Nerfstudio Viewer
-
-Overlay the certified/violated cuboid regions on top of the live Nerfstudio Gaussian-splat scene in an interactive 3D viewer.
-
-#### 1. Make sure the abstract images are in place (see Set-Valued Training → step 1 above)
-
-#### 2. Run
 
 ```bash
 cd ~/Abstract-Rendering
@@ -295,11 +276,15 @@ python3 scripts/visualize_abstract_viser.py \
     --data data/uturn
 ```
 
-Open the URL printed in the terminal (default `http://localhost:8080`) in your browser. The viewer shows:
+Open `http://localhost:8080` in your browser. **Green** = certified, **red** = violated.
 
-- The full Gaussian-splat scene rendered at Nerfstudio quality.
-- Semi-transparent cuboid regions overlaid along the trajectory — **green** = certified, **red** = violated.
-- GUI checkboxes to toggle green / red regions independently.
+![Viser Visualization](figures/vis_plane.png)
+
+| Flag | Effect |
+|---|---|
+| `--opacity 0.2` | Make cuboids more transparent (default `0.35`) |
+| `--no-cuboids` | Show scene only, skip CROWN overlay |
+| `--port 8081` | Change viewer port if 8080 is in use |
 
 **Useful flags:**
 

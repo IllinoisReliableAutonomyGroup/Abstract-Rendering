@@ -12,7 +12,9 @@ RUN pip install torch torchvision torchaudio --index-url https://download.pytorc
 # 4) Nerfstudio, auto_LiRPA, and other Python deps used by this repo
 RUN pip install "nerfstudio[full]"
 
-RUN pip install numpy scipy pillow matplotlib tqdm pyyaml torchvision opencv-python-headless graphviz
+RUN pip install numpy scipy pillow matplotlib tqdm pyyaml torchvision graphviz && \
+    pip uninstall -y opencv-python opencv-python-headless || true && \
+    pip install opencv-python-headless==4.10.0.84
 
 # 5) Copy the Abstract-Rendering repo into the image
 WORKDIR /workspace
