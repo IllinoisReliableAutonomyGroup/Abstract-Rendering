@@ -1,9 +1,9 @@
 bound_method: "forward"
 render_method: "splatfacto"
-case_name: "mini_line"
+case_name: "boeing_airplane"
 odd_type: "cylinder"
 save_filename: null
-debug: false
+debug: true
 
 width: 256
 height: 256
@@ -11,22 +11,20 @@ fx: 216
 fy: 216
 eps2d: 8.0
 
-downsampling_ratio: 4
-tile_size_abstract: 4
-tile_size_render: 8
+downsampling_ratio: 2
+tile_size_abstract: 8
+tile_size_render: 24
 min_distance: 0.01
 max_distance: 100.0
-gs_batch: 100
-part: [1,2,2]
+gs_batch: 20
+part: [1, 2, 2]
 
-data_time: "2025-05-09_151825"
-checkpoint_filename: "step-000040003.ckpt"
+data_time: "2026-01-31_235019"
+checkpoint_filename: "step-000299999.ckpt"
 
 bg_img_path: null
-bg_pure_color: [1.0, 1.0, 1.0]
+bg_pure_color: [0.0, 1.0, 0.0]
 
 save_ref: true
 save_bound: true
 N_samples: 5
-
-

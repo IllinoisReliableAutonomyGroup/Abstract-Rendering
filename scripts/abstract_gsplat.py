@@ -160,6 +160,11 @@ def main(setup_dict):
             if save_bound:
                 img_lb = np.zeros((height, width,3))
                 img_ub = np.zeros((height, width,3))
+                input_dim = input_center.shape[-1]
+                img_lA = torch.zeros(height, width, 3, input_dim, device=DEVICE)
+                img_uA = torch.zeros(height, width, 3, input_dim, device=DEVICE)
+                img_lbias = torch.zeros(height, width, 3, device=DEVICE)
+                img_ubias = torch.zeros(height, width, 3, device=DEVICE)
         
             # Create Tiles Queue
             tiles_queue = [
@@ -188,11 +193,15 @@ def main(setup_dict):
                     img_ref[hl:hu, wl:wu, :] = ref_tile_np
 
                 if save_bound:
-                    lb_tile, ub_tile = alpha_blending_ptb(verf_net, input_center, input_lb, input_ub, bound_method)
+                    lb_tile, ub_tile, lA_tile, uA_tile, lbias_tile, ubias_tile = alpha_blending_ptb(verf_net, input_center, input_lb, input_ub, bound_method)
                     lb_tile_np = lb_tile.squeeze(0).detach().cpu().numpy() # [TH, TW, 3]
                     ub_tile_np = ub_tile.squeeze(0).detach().cpu().numpy()
                     img_lb[hl:hu, wl:wu, :] = lb_tile_np
                     img_ub[hl:hu, wl:wu, :] = ub_tile_np
+                    img_lA[hl:hu, wl:wu, :, :] = lA_tile.squeeze(0)
+                    img_uA[hl:hu, wl:wu, :, :] = uA_tile.squeeze(0)
+                    img_lbias[hl:hu, wl:wu, :] = lbias_tile.squeeze(0)
+                    img_ubias[hl:hu, wl:wu, :] = ubias_tile.squeeze(0)
 
                 if debug:
                     pbar3.update(1)
@@ -210,10 +219,14 @@ def main(setup_dict):
                 save_abstract_record(
                     save_dir=save_folder_full,
                     index = absimg_num,
-                    lower_input = input_lb_org,
-                    upper_input = input_ub_org,
+                    lower_input = input_lb.squeeze(0),
+                    upper_input = input_ub.squeeze(0),
                     lower_img=img_lb_f,
                     upper_img=img_ub_f,
+                    img_lA=img_lA,
+                    img_uA=img_uA,
+                    img_lbias=img_lbias,
+                    img_ubias=img_ubias,
                     point = base_trans,
                     direction = direction,
                     radius = radius,

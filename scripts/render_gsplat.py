@@ -146,6 +146,7 @@ def main(setup_dict):
             verf_net.call_model("update_tile", tile_dict)
 
             if save_ref:
+                #pix_input = torch.stack(torch.meshgrid(torch.arange(wl,wu), torch.arange(hl,hu), indexing='xy'), dim=-1).to(device = DEVICE, dtype=DTYPE).unsqueeze(0)
                 ref_tile = verf_net.forward(input_ref)
                 ref_tile_np = ref_tile.squeeze(0).detach().cpu().numpy()
                 img_ref[hl:hu, wl:wu, :] = ref_tile_np

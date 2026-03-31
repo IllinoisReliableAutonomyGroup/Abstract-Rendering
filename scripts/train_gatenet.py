@@ -49,7 +49,7 @@ def main(config_file, samples_file):
     nn_type = config["nn_type"]
     img_folder = config.get("img_folder", None)
 
-    image_dir = f"Outputs/RenderedImages/{case_name}/{odd_type}/{img_folder}" if img_folder else f"Outputs/Rendered Images/{case_name}/{odd_type}"
+    image_dir = f"Outputs/RenderedImages/{case_name}/{odd_type}/{img_folder}" if img_folder else f"Outputs/RenderedImages/{case_name}/{odd_type}"
 
     # ---------- Step 2: Data loading ----------
     transform = transforms.Compose([

@@ -203,7 +203,8 @@ class GsplatRGBOrigin(nn.Module):
         Ms_pix_12 = Ms_pix[:, :, 1, 2]
 
         covs_pix_det = (Ms_pix_00*Ms_pix_11-Ms_pix_01*Ms_pix_10)**2+(Ms_pix_00*Ms_pix_12-Ms_pix_02*Ms_pix_10)**2+(Ms_pix_01*Ms_pix_12-Ms_pix_02*Ms_pix_11)**2
-        covs_pix_det += depth*1e-20# May cause error
+        # print(torch.min(covs_pix_det), torch.max(covs_pix_det)) 
+        covs_pix_det += depth*1e-15# May cause error
 
         covs_pix_00 = Ms_pix_00**2+Ms_pix_01**2+Ms_pix_02**2
         covs_pix_01 = Ms_pix_00*Ms_pix_10+Ms_pix_01*Ms_pix_11+Ms_pix_02*Ms_pix_12
@@ -227,6 +228,8 @@ class GsplatRGBOrigin(nn.Module):
         alpha = opacities[None, None, None, :, :]*torch.exp(-1/2*prob_density) # [1, TH, TW, N, 1]
         alpha = -torch.nn.functional.relu(-alpha+eps_max)+eps_max 
 
+        #print(f"Alpha Stats: min {alpha.min().item()}, max {alpha.max().item()}, mean {alpha.mean().item()}")
+        # print(f"mean {alpha.mean().item()}")
         return alpha # [1, TH, TW, N, 1]
 
     def alpha_blending(self, alpha, colors):
@@ -251,16 +254,20 @@ class GsplatRGBOrigin(nn.Module):
             DEVICE = self.scene_dict_sorted["opacities"].device
 
             alpha = self.render_alpha(pose, self.scene_dict_sorted) # [1, TH, TW, N, 1]
+            # print(f"Tile {hl,wl,hu,wu}," ,idx)
 
+            # print(f"Tile {hl,wl,hu,wu} ", alpha[:,:,:,:10,0])
+            # print(f"Alpha Stats: min {alpha.min().item()}, max {alpha.max().item()}, mean {alpha.mean().item()}")
             # print(alpha[0,:2,:2,:5])
             colors = self.scene_dict_sorted["colors"].view(1, 1, 1, N, 3).repeat(1, hu-hl, wu-wl, 1, 1)
             # print(colors[0,:2,:2,:5])
             ones = torch.ones((1, hu-hl, wu-wl, 1, 1), device=DEVICE)
             alpha = torch.cat([alpha, ones], dim=-2) # [1, TH, TW, N+1, 1]
             #print(colors.shape, bg_color.shape)
-            colors = torch.cat([colors, bg_color], dim=-2) # [1, TH, TW, N+1, 1]
-
+            colors = torch.cat([colors, bg_color], dim=-2) # [1, TH, TW, N+1, 3]
             colors_combined, alpha_combined = self.alpha_blending(alpha, colors)
+
+            # print(f"Tile {hl,wl,hu,wu} Color Stats: mean {colors_combined.mean().item()}")
 
             return colors_combined.squeeze(-2)
         
@@ -480,7 +487,7 @@ class GsplatRGB(nn.Module):
         Ms_pix_abs += 1e-8
         Ms_pix_abs_inv = 1.0 / Ms_pix_abs
         scale_factor = torch.minimum(torch.ones_like(Ms_pix_abs), max_allowed[:, :, None, None]*Ms_pix_abs_inv)  # [1, N]
-        Ms_pix = Ms_pix *scale_factor
+        Ms_pix = Ms_pix*scale_factor
         # Ms_pix_max_inv = 1.0 / (Ms_pix_max+1e-8)
         # scale_factor = torch.minimum( torch.ones_like(Ms_pix_max), max_allowed*Ms_pix_max_inv)  # [1, N]
         # Ms_pix = Ms_pix *scale_factor[:, :, None, None]
@@ -501,7 +508,7 @@ class GsplatRGB(nn.Module):
         Ms_pix_12 = Ms_pix[:, :, 1, 2]
 
         covs_pix_det = (Ms_pix_00*Ms_pix_11-Ms_pix_01*Ms_pix_10)**2+(Ms_pix_00*Ms_pix_12-Ms_pix_02*Ms_pix_10)**2+(Ms_pix_01*Ms_pix_12-Ms_pix_02*Ms_pix_11)**2
-        covs_pix_det += depth*1e-18 # May cause error
+        covs_pix_det += depth*1e-15
 
         covs_pix_00 = Ms_pix_00**2+Ms_pix_01**2+Ms_pix_02**2
         covs_pix_01 = Ms_pix_00*Ms_pix_10+Ms_pix_01*Ms_pix_11+Ms_pix_02*Ms_pix_12

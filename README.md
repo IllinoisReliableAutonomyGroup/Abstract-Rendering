@@ -37,7 +37,7 @@ cd ~
 git clone --branch master https://github.com/IllinoisReliableAutonomyGroup/Abstract-Rendering.git
 ```
 
-### 2. Install auto_LiRPA
+### 2. Install auto_LiRPA and Create Symbolic Link
 Install the neural network verification library *auto_LiRPA*, and symbolic link it under the Abstract-Rendering dictionary.
 ```bash
 cd ~
@@ -58,10 +58,10 @@ mkdir -p nerfstudio/outputs
 After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `train_data_new`):
 
 ```bash
-export case_name=train_data_new
+export case_name=mini_line
 
 cd ~/Downloads
-unzip ${case_name}_*.zip
+unzip ${case_name}-*.zip
 
 mv ${case_name} ~/Abstract-Rendering/nerfstudio/outputs/
 ```
