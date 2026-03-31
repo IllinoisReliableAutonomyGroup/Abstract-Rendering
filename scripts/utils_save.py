@@ -19,6 +19,10 @@ def save_abstract_record(
     upper_input,
     lower_img,
     upper_img,
+    img_lA=None,
+    img_uA=None,
+    img_lbias=None,
+    img_ubias=None,
     point=None,
     direction=None,
     radius=None,
@@ -27,10 +31,13 @@ def save_abstract_record(
     Save an abstract image record.
 
     Required fields:
-        xl, xu        : input lower/upper bounds
+        xl, xu        : input lower/upper bounds (refined coordinate space)
         lower, upper  : image lower/upper bounds (H, W, 3), float32 in [0, 1]
-        lA, uA        : placeholder (None)
-        lb, ub        : placeholder (None)
+
+    Linear bound fields (None if not computed):
+        lA, uA        : linear coefficients (H, W, 3, input_dim), float32
+        lb, ub        : linear biases (H, W, 3), float32
+        Encodes: lA·x + lb ≤ pixel_color ≤ uA·x + ub, where x ∈ [xl, xu]
 
     Optional:
         point, direction, radius
@@ -40,6 +47,10 @@ def save_abstract_record(
     upper_input = _to_float_tensor(upper_input)
     lower_img   = _to_float_tensor(lower_img)
     upper_img   = _to_float_tensor(upper_img)
+    img_lA      = _to_float_tensor(img_lA)
+    img_uA      = _to_float_tensor(img_uA)
+    img_lbias   = _to_float_tensor(img_lbias)
+    img_ubias   = _to_float_tensor(img_ubias)
     point       = _to_float_tensor(point)
     direction   = _to_float_tensor(direction)
     radius      = _to_float_tensor(radius)
@@ -50,10 +61,10 @@ def save_abstract_record(
         "xu": upper_input,
         "lower": lower_img,
         "upper": upper_img,
-        "lA": None,
-        "uA": None,
-        "lb": None,
-        "ub": None,
+        "lA": img_lA,
+        "uA": img_uA,
+        "lb": img_lbias,
+        "ub": img_ubias,
         "point": point,
         "direction": direction,
         "radius": radius,

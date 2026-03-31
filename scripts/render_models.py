@@ -204,7 +204,7 @@ class GsplatRGBOrigin(nn.Module):
 
         covs_pix_det = (Ms_pix_00*Ms_pix_11-Ms_pix_01*Ms_pix_10)**2+(Ms_pix_00*Ms_pix_12-Ms_pix_02*Ms_pix_10)**2+(Ms_pix_01*Ms_pix_12-Ms_pix_02*Ms_pix_11)**2
         # print(torch.min(covs_pix_det), torch.max(covs_pix_det)) 
-        covs_pix_det += depth*1e-20# May cause error
+        covs_pix_det += depth*1e-15# May cause error
 
         covs_pix_00 = Ms_pix_00**2+Ms_pix_01**2+Ms_pix_02**2
         covs_pix_01 = Ms_pix_00*Ms_pix_10+Ms_pix_01*Ms_pix_11+Ms_pix_02*Ms_pix_12
@@ -508,7 +508,7 @@ class GsplatRGB(nn.Module):
         Ms_pix_12 = Ms_pix[:, :, 1, 2]
 
         covs_pix_det = (Ms_pix_00*Ms_pix_11-Ms_pix_01*Ms_pix_10)**2+(Ms_pix_00*Ms_pix_12-Ms_pix_02*Ms_pix_10)**2+(Ms_pix_01*Ms_pix_12-Ms_pix_02*Ms_pix_11)**2
-        covs_pix_det += depth*1e-15 # May cause error
+        covs_pix_det += depth*1e-15
 
         covs_pix_00 = Ms_pix_00**2+Ms_pix_01**2+Ms_pix_02**2
         covs_pix_01 = Ms_pix_00*Ms_pix_10+Ms_pix_01*Ms_pix_11+Ms_pix_02*Ms_pix_12

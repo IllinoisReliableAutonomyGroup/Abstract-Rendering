@@ -1,6 +1,7 @@
 import os
 import sys
 import torch
+import torch.nn as nn
 
 from utils_operation import regulate, cumprod
 
@@ -8,19 +9,51 @@ grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 sys.path.append(grandfather_path)
 
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
+from auto_LiRPA.perturbations import PerturbationLinear
 from collections import defaultdict
 
 
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 bound_opts = {
     'conv_mode': 'matrix',
     'optimize_bound_args': {
-        'iteration': 100, 
-        # 'lr_alpha':0.02, 
+        'iteration': 100,
+        # 'lr_alpha':0.02,
         'early_stop_patience':5},
-} 
+}
+
+
+class SumCumProdModel(nn.Module):
+    """SUMCUMPROD (Algorithm 5) as nn.Module for auto_LiRPA.
+
+    Input:  alpha, shape (B, N)
+    Output: pc, shape (B, 3) — all 3 color channels at once
+    Colors are fixed (not perturbed).
+    """
+    def __init__(self, colors):
+        super().__init__()
+        self.register_buffer('colors', colors)  # (B, N, 3)
+
+    def forward(self, alpha):
+        B, N = alpha.shape
+        one_minus_alpha = torch.relu(1 - alpha - 1e-6) + 1e-6  # clamp min=1e-6, LiRPA-safe
+        log_one_minus_alpha = torch.log(one_minus_alpha)   # (B, N)
+
+        running = torch.zeros(B, 1, device=alpha.device)
+        prefix_list = []
+        for i in range(N):
+            prefix_list.append(running)
+            running = running + log_one_minus_alpha[:, i:i+1]
+
+        prefix = torch.cat(prefix_list, dim=1)        # (B, N)
+        prefix = -torch.relu(-prefix)                  # clamp ≤ 0
+        prefix = torch.exp(prefix)                     # (B, N)
+
+        alpha = torch.relu(alpha)
+        color = torch.relu(self.colors)
+        return torch.sum(prefix.unsqueeze(-1) * alpha.unsqueeze(-1) * color, dim=1)
 
 def alpha_blending(alpha, colors, method, triu_mask=None):
 
@@ -104,75 +137,192 @@ def alpha_blending_ref(net, input_ref):
 def alpha_blending_ptb(net, input_ref, input_lb, input_ub, bound_method):
     N = net.call_model("get_num")
     gs_batch = net.call_model("get_gs_batch")
-    bg_color=(net.call_model("get_bg_color_tile")).unsqueeze(0).unsqueeze(-2) #[1, TH, TW, N, 3]
+    bg_color = net.call_model("get_bg_color_tile").unsqueeze(0).unsqueeze(-2)  # (1, TH, TW, 1, 3)
 
-    if N==0:
-        return bg_color.squeeze(-2), bg_color.squeeze(-2)
-    else:
-        alphas_int_lb = []
-        alphas_int_ub = []
+    if N == 0:
+        bg = bg_color.squeeze(-2)  # (1, TH, TW, 3)
+        input_dim = input_ref.shape[-1]
+        TH, TW = bg.shape[1], bg.shape[2]
+        zero_A = torch.zeros(1, TH, TW, 3, input_dim, device=bg.device)
+        return bg, bg, zero_A, zero_A, bg.clone(), bg.clone()
 
-        hl,wl,hu,wu = (net.call_model("get_tile_dict")[key] for key in ["hl", "wl", "hu", "wu"])
+    # ── STEP 1: Extract linear bounds of α (per GS batch) from auto_LiRPA ──
+    alphas_lA = []
+    alphas_uA = []
+    alphas_lbias = []
+    alphas_ubias = []
+    alphas_ref = []
 
-        ptb = PerturbationLpNorm(x_L=input_lb,x_U=input_ub)
-        input_ptb = BoundedTensor(input_ref, ptb)
+    hl, wl, hu, wu = (net.call_model("get_tile_dict")[key]
+                       for key in ["hl", "wl", "hu", "wu"])
+    TH, TW = hu - hl, wu - wl
 
-        with torch.no_grad():
-            for i, idx_start in enumerate(range(0, N, gs_batch)):
-                idx_end = min(idx_start + gs_batch, N)
+    ptb = PerturbationLpNorm(x_L=input_lb, x_U=input_ub)
+    input_ptb = BoundedTensor(input_ref, ptb)
 
-                net.call_model("update_model_param",idx_start,idx_end,"middle")
-                model = BoundedModule(net, input_ref, bound_opts=bound_opts, device=DEVICE)
+    with torch.no_grad():
+        for idx_start in range(0, N, gs_batch):
+            idx_end = min(idx_start + gs_batch, N)
+            num_gs = idx_end - idx_start
 
-                # Compute IBP bounds for reference
-                alpha_ibp_lb, alpha_ibp_ub = model.compute_bounds(x=(input_ptb, ), method="ibp")
-                reference_interm_bounds = {}
-                for node in model.nodes():
-                    if (node.perturbed
+            net.call_model("update_model_param", idx_start, idx_end, "middle")
+
+            # Forward pass at input_ref for exact reference alphas
+            alpha_ref_batch = net(input_ref)   # (1, TH*TW*num_gs)
+            alpha_ref_batch = alpha_ref_batch.reshape(TH * TW, num_gs)
+            alphas_ref.append(alpha_ref_batch.detach())
+
+            model = BoundedModule(net, input_ref, bound_opts=bound_opts, device=DEVICE)
+
+            # IBP for reference intermediate bounds
+            model.compute_bounds(x=(input_ptb,), method="ibp")
+            reference_interm_bounds = {}
+            for node in model.nodes():
+                if (node.perturbed
                         and isinstance(node.lower, torch.Tensor)
                         and isinstance(node.upper, torch.Tensor)):
-                        reference_interm_bounds[node.name] = (node.lower, node.upper)
+                    reference_interm_bounds[node.name] = (node.lower, node.upper)
 
-                # required_A = defaultdict(set)
-                # required_A[model.output_name[0]].add(model.input_name[0])
+            # CROWN with A matrix extraction
+            required_A = defaultdict(set)
+            required_A[model.output_name[0]].add(model.input_name[0])
 
-                # Compute linear buond for alpha
-                alpha_int_lb, alpha_int_ub= model.compute_bounds(
-                    x= (input_ptb, ), 
-                    method=bound_method, 
-                    reference_bounds=reference_interm_bounds, 
-                )  #[1, TH, TW, N, 4]
-                
-                # lower_A, lower_bias = A_dict[model.output_name[0]][model.input_name[0]]['lA'], A_dict[model.output_name[0]][model.input_name[0]]['lbias']
-                # upper_A, upper_bias = A_dict[model.output_name[0]][model.input_name[0]]['uA'], A_dict[model.output_name[0]][model.input_name[0]]['ubias']
-                # print(f"lower_A shape: {lower_A.shape}, lower_bias shape: {lower_bias.shape}")
-                # print(f"upper_A shape: {upper_A.shape}, upper_bias shape: {upper_bias.shape}")
-        
-                alpha_int_lb = alpha_int_lb.reshape(1, hu-hl, wu-wl, idx_end-idx_start, 1)
-                alpha_int_ub = alpha_int_ub.reshape(1, hu-hl, wu-wl, idx_end-idx_start, 1)
+            # Must use 'backward' (CROWN) to extract A matrices;
+            # forward mode does not support return_A.
+            _, _, A_dict = model.compute_bounds(
+                x=(input_ptb,),
+                method='backward',
+                reference_bounds=reference_interm_bounds,
+                return_A=True,
+                needed_A_dict=required_A,
+            )
 
-                alphas_int_lb.append(alpha_int_lb.detach())
-                alphas_int_ub.append(alpha_int_ub.detach())
+            # lA·x + lbias ≤ α ≤ uA·x + ubias
+            A_entry = A_dict[model.output_name[0]][model.input_name[0]]
+            lA    = A_entry['lA'].detach()      # (1, TH*TW*num_gs, input_dim)
+            uA    = A_entry['uA'].detach()
+            lbias = A_entry['lbias'].detach()    # (1, TH*TW*num_gs)
+            ubias = A_entry['ubias'].detach()
 
-            del model
-            torch.cuda.empty_cache()
+            # Reshape per-pixel: (1, TH*TW*num_gs, d) → (TH*TW, num_gs, d)
+            lA    = lA.reshape(TH * TW, num_gs, -1)
+            uA    = uA.reshape(TH * TW, num_gs, -1)
+            lbias = lbias.reshape(TH * TW, num_gs)
+            ubias = ubias.reshape(TH * TW, num_gs)
 
-            alphas_int_lb = torch.cat(alphas_int_lb, dim=-2)
-            alphas_int_ub = torch.cat(alphas_int_ub, dim=-2)
+            alphas_lA.append(lA)
+            alphas_uA.append(uA)
+            alphas_lbias.append(lbias)
+            alphas_ubias.append(ubias)
 
-        # Load Colors within Tile and Add background
-        colors = net.call_model("get_color_tile")
-        colors = colors.view(1, 1, 1, alphas_int_lb.size(-2), 3).repeat(1, alpha_int_lb.size(1), alpha_int_lb.size(2), 1, 1)
-        colors = torch.cat([colors, bg_color], dim = -2)
+        del model
+        torch.cuda.empty_cache()
 
-        ones = torch.ones_like(alphas_int_lb[:, :, :, 0:1, :])
-        alphas_int_lb = torch.cat([alphas_int_lb, ones], dim=-2)
-        alphas_int_ub = torch.cat([alphas_int_ub, ones], dim=-2)        
+    # ── STEP 2: Concatenate α (partial GS) → α (all GS) ──
+    # Concatenate along the Gaussian dimension (dim=1 for per-pixel A matrices)
+    full_lA    = torch.cat(alphas_lA, dim=1)       # (TH*TW, N, input_dim)
+    full_uA    = torch.cat(alphas_uA, dim=1)
+    full_lbias = torch.cat(alphas_lbias, dim=1)    # (TH*TW, N)
+    full_ubias = torch.cat(alphas_ubias, dim=1)
+    alpha_ref_all = torch.cat(alphas_ref, dim=1)   # (TH*TW, N)
 
-        # Volume Rendering for Interval Bounds
-        color_alpha_out_lb, color_alpha_out_ub = alpha_blending_interval(alphas_int_lb, alphas_int_ub, colors)
+    # Append background Gaussian: α_bg = 1 (fixed, zero A, bias = 1)
+    num_pixels = TH * TW
+    input_dim = full_lA.shape[-1]
+    full_lA    = torch.cat([full_lA,
+                            torch.zeros(num_pixels, 1, input_dim, device=DEVICE)], dim=1)
+    full_uA    = torch.cat([full_uA,
+                            torch.zeros(num_pixels, 1, input_dim, device=DEVICE)], dim=1)
+    full_lbias = torch.cat([full_lbias,
+                            torch.ones(num_pixels, 1, device=DEVICE)], dim=1)
+    full_ubias = torch.cat([full_ubias,
+                            torch.ones(num_pixels, 1, device=DEVICE)], dim=1)
+    alpha_ref_flat = torch.cat([alpha_ref_all,
+                                torch.ones(num_pixels, 1, device=DEVICE)], dim=1)  # (TH*TW, N+1)
 
-        color_out_lb,alpha_out_lb = color_alpha_out_lb.split([3,1],dim=-1)
-        color_out_ub,alpha_out_ub = color_alpha_out_ub.split([3,1],dim=-1)
+    # Colors + background
+    colors = net.call_model("get_color_tile")
+    colors = colors.view(1, 1, 1, N, 3).repeat(1, TH, TW, 1, 1)
+    colors = torch.cat([colors, bg_color], dim=-2)   # (1, TH, TW, N+1, 3)
 
-    return color_out_lb.squeeze(-2), color_out_ub.squeeze(-2)
+    # ── STEPS 3–5: PerturbationLinear → BoundedModule → compute_bounds ──
+    N_total = full_lA.shape[1]   # N + 1 (including background)
+
+    # Colors: (1, TH, TW, N_total, 3) → (TH*TW, N_total, 3)
+    colors_flat = colors.reshape(-1, N_total, 3)
+
+    with torch.no_grad():
+        # STEP 3: Wrap α bounds in PerturbationLinear
+        # PerturbationLinear.concretize() will compose A_blend (from CROWN on
+        # blending model) with lA/uA and concretize against input_lb/input_ub,
+        # preserving full correlation: camera x → α → pc.
+        ptb_linear = PerturbationLinear(
+            lower_A=full_lA,                                       # (TH*TW, N_total, input_dim)
+            upper_A=full_uA,
+            lower_b=full_lbias,                                    # (TH*TW, N_total)
+            upper_b=full_ubias,
+            input_lb=input_lb.expand(num_pixels, -1),              # (TH*TW, input_dim)
+            input_ub=input_ub.expand(num_pixels, -1),
+        )
+        alpha_ptb = BoundedTensor(alpha_ref_flat, ptb_linear)
+
+        # STEP 4: Wrap blending step in BoundedModule (all 3 channels at once)
+        blend_model = SumCumProdModel(colors_flat)
+        bounded_blend = BoundedModule(
+            blend_model, alpha_ref_flat,
+            bound_opts=bound_opts, device=DEVICE
+        )
+
+        # STEP 5: CROWN backward → A_blend; PerturbationLinear.concretize
+        # composes A_blend with lA/uA and concretizes against camera bounds.
+        # Also extract A matrices for linear bounds on pixel color.
+        required_A_blend = defaultdict(set)
+        required_A_blend[bounded_blend.output_name[0]].add(bounded_blend.input_name[0])
+
+        pixel_lb, pixel_ub, A_dict_blend = bounded_blend.compute_bounds(
+            x=(alpha_ptb,), method="backward",
+            return_A=True,
+            needed_A_dict=required_A_blend,
+        )
+        # pixel_lb, pixel_ub: (TH*TW, 3)
+
+        # Extract blend-level A matrices: pixel_color w.r.t. alpha
+        A_blend_entry = A_dict_blend[bounded_blend.output_name[0]][bounded_blend.input_name[0]]
+        blend_lA    = A_blend_entry['lA'].detach()      # (TH*TW, 3, N_total)
+        blend_uA    = A_blend_entry['uA'].detach()
+        blend_lbias = A_blend_entry['lbias'].detach()    # (TH*TW, 3)
+        blend_ubias = A_blend_entry['ubias'].detach()
+
+        # ── STEP 5b: Compose blend-level A (pixel→alpha) with alpha-level A (alpha→x) ──
+        # blend_lA: (TH*TW, 3, N_total), full_lA: (TH*TW, N_total, input_dim)
+        # Result: composite_lA: (TH*TW, 3, input_dim)
+        # Split into positive and negative parts for correct bound composition
+        blend_lA_pos = torch.clamp(blend_lA, min=0)
+        blend_lA_neg = torch.clamp(blend_lA, max=0)
+        blend_uA_pos = torch.clamp(blend_uA, min=0)
+        blend_uA_neg = torch.clamp(blend_uA, max=0)
+
+        # Lower bound: pos*lower + neg*upper
+        composite_lA = torch.bmm(blend_lA_pos, full_lA) + torch.bmm(blend_lA_neg, full_uA)
+        composite_lbias = blend_lbias + torch.bmm(blend_lA_pos, full_lbias.unsqueeze(-1)).squeeze(-1) \
+                          + torch.bmm(blend_lA_neg, full_ubias.unsqueeze(-1)).squeeze(-1)
+
+        # Upper bound: pos*upper + neg*lower
+        composite_uA = torch.bmm(blend_uA_pos, full_uA) + torch.bmm(blend_uA_neg, full_lA)
+        composite_ubias = blend_ubias + torch.bmm(blend_uA_pos, full_ubias.unsqueeze(-1)).squeeze(-1) \
+                          + torch.bmm(blend_uA_neg, full_lbias.unsqueeze(-1)).squeeze(-1)
+
+        # Reshape to tile shape: (TH*TW, 3, input_dim) → (1, TH, TW, 3, input_dim)
+        composite_lA = composite_lA.reshape(1, TH, TW, 3, input_dim)
+        composite_uA = composite_uA.reshape(1, TH, TW, 3, input_dim)
+        composite_lbias = composite_lbias.reshape(1, TH, TW, 3)
+        composite_ubias = composite_ubias.reshape(1, TH, TW, 3)
+
+        img_lb = pixel_lb.reshape(1, TH, TW, 3)
+        img_ub = pixel_ub.reshape(1, TH, TW, 3)
+
+        del bounded_blend
+        torch.cuda.empty_cache()
+
+    # ── STEP 6: Return image bounds (interval + linear) ──
+    return img_lb, img_ub, composite_lA, composite_uA, composite_lbias, composite_ubias
