@@ -1,0 +1,72 @@
+Training GateNet with Abstract Rendering - Memory & Gradient Issues Summary
+The Goal
+Train GateNet at 64×64 resolution with both concrete images and abstract bounds using auto_LiRPA.
+
+Bound Propagation Methods
+IBP (Interval Bound Propagation)
+
+Memory: LOW (~2-3 GB)
+Gradient Support: ❌ NO - returns detached tensors
+Bound Quality: Loose
+Issue: Even if you remove torch.no_grad(), you get inplace BatchNorm error when trying to backprop combined losses
+
+Forward Mode
+
+Memory: HIGH (~12-15 GB forward pass alone)
+Gradient Support: ✅ YES
+Bound Quality: Medium
+Issue: OOM during forward pass at 64×64
+Can use 32x32 but doesnt support avg_pool
+
+Backward Mode (CROWN)
+
+Memory: VERY HIGH (~15-20 GB total)
+Gradient Support: ✅ YES
+Bound Quality: Tightest
+Issue: OOM during forward pass at 64×64
+
+
+Image Resolution Impact
+64×64 (Full Resolution)
+
+IBP: Fits in memory but can't train (no gradients + BatchNorm errors)
+Forward/Backward: OOM during forward pass (~15 GB needed, only 13 GB available)
+Memory scales with: (H × W)² for bound matrices
+
+32×32 (Reduced Resolution)
+
+IBP: Fits, but still no gradients
+Forward: Fits! (~4-5 GB total) ✅ Can train with gradients
+Backward: Might fit (~6-8 GB)
+Issue: Need to remove one pooling layer in GateNet or get BatchNorm 1×1 error
+
+16×16 (Very Low Resolution)
+
+All methods fit easily
+But resolution too low for practical use
+
+
+Key Errors Encountered
+OOM (Out of Memory)
+torch.cuda.OutOfMemoryError: Tried to allocate 3.00 GiB
+
+Cause: Forward/Backward methods at 64×64
+Solution: Use IBP or reduce resolution to 32×32
+
+Inplace BatchNorm Error
+RuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation
+
+Cause: Mixing concrete and abstract forward passes in same training step with IBP
+Solution: Separate the optimization steps OR use monitoring only
+
+No Gradient Error
+RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+
+Cause: IBP returns detached tensors (no gradient support)
+Solution: Can't backprop through IBP bounds
+
+BatchNorm 1×1 Spatial Error (at 32×32)
+ValueError: Expected more than 1 value per channel when training, got input size torch.Size([1, 16, 1, 1])
+
+Cause: Too many pooling layers → feature map becomes 1×1
+Solution: Remove one pooling layer OR use model.eval() during __init__ size checking

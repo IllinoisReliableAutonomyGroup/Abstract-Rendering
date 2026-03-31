@@ -1,0 +1,51 @@
+# ============================================================================
+# Paths
+# ============================================================================
+concrete_samples_json: "configs/boeing787_nerfstudio/samples.json"
+concrete_image_root: "Outputs/RenderedImages/boeing787_nerfstudio/cuboid"
+abstract_folder: "Outputs/AbstractImages/boeing787_nerfstudio/cuboid"
+checkpoint_dir: "weights/gatenet/boeing787_nerfstudio"
+pretrained_checkpoint: null  # or "path/to/checkpoint.pth"
+run_datetime: "20260315_222959"
+
+# ============================================================================
+# Model Config
+# ============================================================================
+image_width: 64
+image_height: 64
+batch_norm_decay: 0.99
+batch_norm_epsilon: 0.001
+
+# ============================================================================
+# Training Config
+# ============================================================================
+num_epochs: 65
+batch_size_concrete: 1
+batch_size_abstract: 7
+num_workers: 4
+
+# ============================================================================
+# Loss Weights
+# ============================================================================
+lambda_concrete: 0.0
+lambda_abstract: 1.0
+tolerance: 0.02
+
+# ============================================================================
+# Optimizer Config
+# ============================================================================
+learning_rate: 0.0005
+weight_decay: 0.00001
+
+# ============================================================================
+# CROWN Config
+# ============================================================================
+bound_method: "backward"  # Options: 'backward', 'forward', 'crown-ibp', 'ibp'
+
+# ============================================================================
+# Checkpointing
+# ============================================================================
+save_every: 5  # Save checkpoint every N epochs
+
+use_reinforce: false  
+reinforce_noise_std: 0.1
