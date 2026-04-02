@@ -17,10 +17,10 @@ tile_size_render: 24
 min_distance: 0.01
 max_distance: 100.0
 gs_batch: 70
-part: [2,5,5]
+part: [8,1,1]
 
 data_time: "2026-01-31_235019"
-checkpoint_filename: "step-000299999_pruned_90.ckpt"
+checkpoint_filename: "step-000300001.ckpt"
 
 bg_img_path: null
 bg_pure_color: [0.0117, 0.208, 0.988]
