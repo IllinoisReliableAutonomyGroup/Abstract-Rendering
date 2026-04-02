@@ -107,6 +107,256 @@ def load_cells(abstract_folder):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# LSR certification — max error per partition from precomputed A/b matrices
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _max_linear_over_box(a, xl, xu):
+    """Max of linear function a·x over box x ∈ [xl, xu]. All tensors 1-D."""
+    return (torch.relu(a) * xu - torch.relu(-a) * xl).sum()
+
+
+def run_lsr_certification(cells, cert_path, threshold):
+    """
+    For each partition i, compute the max certified pose error:
+
+        error_j(x) = y_j - x_j  bounded by  (lA[j]-e_j)·x+lb[j]  ≤  error_j  ≤  (uA[j]-e_j)·x+ub[j]
+
+    Max over x ∈ [xl, xu]:
+        upper_j = max_x  (uA[j] - e_j)·x + ub[j]
+        lower_j = max_x |(lA[j] - e_j)·x + lb[j]|
+        error_j = max(upper_j, lower_j)
+
+    max_error_i = max_j(error_j)
+
+    Returns (colors, per_partition_errors) where colors are "green"/"red"
+    based on threshold.
+    """
+    cert = torch.load(cert_path, map_location="cpu", weights_only=False)
+    pose_lA      = cert["pose_lA"]       # [N, n_out, n_x]
+    pose_lb_bias = cert["pose_lb_bias"]  # [N, n_out]
+    pose_uA      = cert["pose_uA"]       # [N, n_out, n_x]
+    pose_ub_bias = cert["pose_ub_bias"]  # [N, n_out]
+
+    n_partitions = pose_lA.shape[0]
+    n_out        = pose_lA.shape[1]
+
+    if n_partitions != len(cells):
+        print(f"  WARNING: cert has {n_partitions} entries but {len(cells)} cells loaded — "
+              f"using min({n_partitions}, {len(cells)})")
+    n = min(n_partitions, len(cells))
+
+    errors = []
+    for i in range(n):
+        xl = torch.tensor(cells[i]["xl"], dtype=torch.float32)
+        xu = torch.tensor(cells[i]["xu"], dtype=torch.float32)
+
+        # Interval width per output dim: (uA[j] - lA[j])·p + (ub[j] - lb[j])
+        # maximised over p ∈ [xl, xu] — this is what training minimised.
+        diff_A    = pose_uA[i] - pose_lA[i]          # [n_out, n_x]
+        diff_bias = pose_ub_bias[i] - pose_lb_bias[i] # [n_out]
+
+        max_error_i = 0.0
+        for j in range(n_out):
+            width_j = _max_linear_over_box(diff_A[j], xl, xu) + diff_bias[j]
+            max_error_i = max(max_error_i, width_j.item())
+
+        errors.append(max_error_i)
+
+    errors = np.array(errors)
+    global_max = errors.max()
+    global_mean = errors.mean()
+    n_green = int((errors <= threshold).sum())
+    n_red   = n - n_green
+
+    print(f"  Max certified error  (global):  {global_max:.6f}")
+    print(f"  Mean certified error:           {global_mean:.6f}")
+    print(f"  Threshold: {threshold}  →  {n_green} green | {n_red} red")
+
+    colors = ["green" if e <= threshold else "red" for e in errors]
+    return colors, errors
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2-D orbital certification plot
+# ─────────────────────────────────────────────────────────────────────────────
+
+def plot_orbital_2d(cells, cert_colors, cert_errors, threshold, output_path):
+    """
+    Top-down 2-D view of the orbital certification.
+
+    - Circle = orbital trajectory (XY projection of waypoints)
+    - Each arc segment coloured green (certified) or red (violated)
+    - Radial lines from the orbit center to each arc endpoint
+    - Colour intensity encodes the certified error magnitude
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.patches import Arc, FancyArrowPatch
+    from matplotlib.colors import Normalize
+    from matplotlib.cm import ScalarMappable
+
+    # ── Orbit geometry (XY projection) ───────────────────────────────────────
+    # Each cell spans from point + xl[0]*direction to point + xu[0]*direction
+    waypoints = np.array([c["point"][:2] for c in cells])
+    directions = np.array([c["direction"][:2] for c in cells])
+    xl0 = np.array([c["xl"][0] for c in cells])
+    xu0 = np.array([c["xu"][0] for c in cells])
+
+    starts = waypoints + xl0[:, None] * directions   # [N, 2]
+    ends   = waypoints + xu0[:, None] * directions   # [N, 2]
+
+    all_pts = np.vstack([starts, ends])
+    center  = all_pts.mean(axis=0)
+    R       = np.linalg.norm(all_pts - center, axis=1).mean() * 0.65
+
+    def to_angle(pt):
+        return np.arctan2(pt[1] - center[1], pt[0] - center[0])
+
+    n = len(cells)
+    errors = np.array(cert_errors)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # ── Draw full green circle as base (gaps default to certified) ───────────
+    full_angles = np.linspace(0, 360, 360)
+    full_x = center[0] + R * np.cos(np.radians(full_angles))
+    full_y = center[1] + R * np.sin(np.radians(full_angles))
+    green_rgb = (0.15, 0.75, 0.15)
+    ax.fill(np.append(full_x, center[0]), np.append(full_y, center[1]),
+            color=green_rgb, alpha=0.35, linewidth=0, zorder=1)
+    ax.plot(full_x, full_y, color=green_rgb, linewidth=6, solid_capstyle="butt", zorder=2)
+
+    # ── Draw each arc ─────────────────────────────────────────────────────────
+    norm = Normalize(vmin=0, vmax=max(errors.max(), threshold * 2))
+
+    for i in range(n):
+        a0 = to_angle(starts[i])
+        a1 = to_angle(ends[i])
+        color = cert_colors[i]
+
+        deg0 = np.degrees(a0)
+        deg1 = np.degrees(a1)
+
+        if deg1 < deg0:
+            deg1 += 360.0
+        arc_angles = np.linspace(deg0, deg1, max(int(abs(deg1 - deg0)) + 2, 4))
+        arc_x = center[0] + R * np.cos(np.radians(arc_angles))
+        arc_y = center[1] + R * np.sin(np.radians(arc_angles))
+
+        if color == "green":
+            continue   # already covered by base green circle
+
+        rgb = (0.85, 0.15, 0.15)
+
+        # Filled sector: center → arc points → back to center
+        sector_x = np.concatenate([[center[0]], arc_x, [center[0]]])
+        sector_y = np.concatenate([[center[1]], arc_y, [center[1]]])
+        ax.fill(sector_x, sector_y, color=rgb, alpha=0.35, linewidth=0, zorder=3)
+
+        # Arc outline
+        ax.plot(arc_x, arc_y, color=rgb, linewidth=6, solid_capstyle="butt", zorder=4)
+
+
+
+
+    # ── Airplane image (background removed via corner flood-fill) ─────────────
+    plane_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "plane.png")
+    if os.path.exists(plane_path):
+        from PIL import Image
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        from collections import deque
+
+        img = Image.open(plane_path).convert("RGBA")
+        arr = np.array(img, dtype=np.uint8)   # [H, W, 4]
+        H, W = arr.shape[:2]
+
+        # Build near-white mask (threshold 248 to keep subtle plane shadows)
+        white_mask = (arr[:, :, 0] > 248) & (arr[:, :, 1] > 248) & (arr[:, :, 2] > 248)
+
+        # Flood-fill from all four corners to find background (connected white region)
+        bg_mask = np.zeros((H, W), dtype=bool)
+        # Seed from every pixel on all four edges
+        queue = deque()
+        edge_pixels = (
+            [(0, c) for c in range(W)] +
+            [(H - 1, c) for c in range(W)] +
+            [(r, 0) for r in range(H)] +
+            [(r, W - 1) for r in range(H)]
+        )
+        for r, c in edge_pixels:
+            if white_mask[r, c] and not bg_mask[r, c]:
+                bg_mask[r, c] = True
+                queue.append((r, c))
+        while queue:
+            r, c = queue.popleft()
+            for dr, dc in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and not bg_mask[nr, nc] and white_mask[nr, nc]:
+                    bg_mask[nr, nc] = True
+                    queue.append((nr, nc))
+
+        # Second pass: grow into slightly-off-white pixels adjacent to background
+        loose_mask = (arr[:, :, 0] > 248) & (arr[:, :, 1] > 248) & (arr[:, :, 2] > 248)
+        queue2 = deque()
+        for r, c in zip(*np.where(bg_mask)):
+            for dr, dc in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and not bg_mask[nr, nc] and loose_mask[nr, nc]:
+                    bg_mask[nr, nc] = True
+                    queue2.append((nr, nc))
+        while queue2:
+            r, c = queue2.popleft()
+            for dr, dc in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and not bg_mask[nr, nc] and loose_mask[nr, nc]:
+                    bg_mask[nr, nc] = True
+                    queue2.append((nr, nc))
+
+        # Make background transparent
+        arr[bg_mask, 3] = 0
+
+        plane_img = Image.fromarray(arr)
+        # Scale to fit inside the circle (diameter = 2R in data units → pixel size)
+        display_size = int(R * 1.2 * fig.dpi * 2 / max(ax.get_xlim()[1] - ax.get_xlim()[0],
+                                                         ax.get_ylim()[1] - ax.get_ylim()[0]) * 8)
+        display_size = max(60, min(display_size, 200))
+        imagebox = OffsetImage(plane_img, zoom=display_size / max(H, W))
+        ab = AnnotationBbox(imagebox, (center[0], center[1]),
+                            frameon=False, zorder=8)
+        ax.add_artist(ab)
+
+    # ── Error colorbar ────────────────────────────────────────────────────────
+    sm = ScalarMappable(cmap="RdYlGn_r", norm=norm)
+    sm.set_array([])
+
+    # ── Legend ────────────────────────────────────────────────────────────────
+    n_green = cert_colors.count("green")
+    n_red   = len(cert_colors) - n_green
+    legend_handles = [
+        mpatches.Patch(color=(0.15, 0.75, 0.15),
+                       label=f"Certified  ≤ {threshold}  ({n_green})"),
+        mpatches.Patch(color=(0.85, 0.15, 0.15),
+                       label=f"Violated  > {threshold}  ({n_red})"),
+    ]
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=14,
+              framealpha=0.85)
+
+    ax.set_title(
+        f"Orbital Certification  —  {n_green}/{n} certified\n"
+        f"mean error {errors.mean():.4f}  |  max error {errors.max():.4f}",
+        fontsize=16, pad=16
+    )
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  2-D orbital plot saved: {output_path}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CROWN — mirrors test_gatenet_abstract.py exactly
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -466,6 +716,14 @@ def main():
                         help="just show the Gaussian scene, skip certification and cuboids")
     parser.add_argument("--opacity", type=float, default=0.35,
                         help="cuboid opacity 0=invisible 1=solid (default 0.35)")
+    parser.add_argument("--lsr", default=None, metavar="LSR_CERT_PT",
+                        help="path to lsr_certification.pt — color boxes by max certified "
+                             "pose error instead of running CROWN from scratch")
+    parser.add_argument("--threshold", type=float, default=0.05,
+                        help="error threshold for green/red coloring with --lsr (default 0.05)")
+    parser.add_argument("--plot2d", default=None, metavar="OUTPUT_PNG",
+                        help="save a 2-D top-down orbital certification plot to this path "
+                             "and exit (no viser/nerfstudio launched); requires --lsr")
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -495,10 +753,23 @@ def main():
         print(f"Loading cells from: {cfg['abstract_folder']}")
         cells = load_cells(cfg["abstract_folder"])
 
-        print("\nRunning CROWN …")
-        cert_colors = run_certification(cells, cfg)
+        if args.lsr:
+            print(f"\nLSR certification from: {args.lsr}")
+            cert_colors, cert_errors = run_lsr_certification(cells, args.lsr, args.threshold)
+        else:
+            print("\nRunning CROWN …")
+            cert_colors = run_certification(cells, cfg)
+            cert_errors = None
         n_green = cert_colors.count("green")
         n_red   = cert_colors.count("red")
+
+    # ── 2-D orbital plot (early exit) ─────────────────────────────────────────
+    if args.plot2d:
+        if args.no_cuboids or cert_errors is None:
+            print("ERROR: --plot2d requires --lsr to be set and cells to be loaded.")
+        else:
+            plot_orbital_2d(cells, cert_colors, cert_errors, args.threshold, args.plot2d)
+        import sys; sys.exit(0)
 
     # ── Viser / ns-viewer ─────────────────────────────────────────────────────
     R_dp = t_dp = scale_dp = None  # only set for ns mode

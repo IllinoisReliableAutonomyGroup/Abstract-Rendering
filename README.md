@@ -289,6 +289,190 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 | `--no-cuboids` | Show the scene only, skip CROWN and cuboid overlay |
 | `--port 8081` | Change the viewer port if 8080 is already in use |
 
+---
+
+### Set-Valued Training Results — `train_data_new` (Hybrid)
+
+The hybrid training approach combines concrete and abstract losses with CROWN certification. The three figures below show certification results under tolerances **ε = 0.05 m**, **0.10 m**, and **0.20 m** respectively. Green regions are certified; red regions have potential violations; blue markers indicate gate positions.
+
+| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
+|:---:|:---:|:---:|
+| ![h1](figures/h1.png) | ![h2](figures/h2.png) | ![h3](figures/h3.png) |
+
+---
+
+## Boeing 787 — Pose Estimation with LSR Certification
+
+This section covers the full pipeline for the **Boeing 787 Nerfstudio** scene using **Linear Set Representation (LSR)** — a tighter certification method that composes CROWN's per-pixel affine bounds with the abstract renderer's pixel-level affine LSR to produce certified affine pose bounds as a function of the original cuboid perturbation.
+
+Two trajectory types are supported, both stored under `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/`:
+
+```
+Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
+├── cuboidal/    ← cuboidal trajectory (standard U-turn / approach path)
+└── orbital/     ← circular orbital trajectory (all-angle views)
+```
+
+> **Important:** Both subdirectories are populated by running the same `abstract_gsplat_pose_estimation.py` script with different trajectory files. The `orbital/` folder is **not** created automatically — after running abstract rendering with the orbital trajectory, manually create the subfolder and move the output `.pt` files there:
+> ```bash
+> mkdir -p Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital
+> mv Outputs/AbstractImages/boeing787_nerfstudio/cuboid/abstract_*.pt \
+>    Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital/
+> ```
+
+---
+
+### 1. Generate the Trajectory
+
+**Cuboidal trajectory** (standard path with lateral + vertical perturbations):
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 traj_gen/generate_traj_ns.py \
+    --config configs/${case_name}/config.yaml \
+    --output configs/${case_name}/traj.json
+```
+
+**Orbital trajectory** (full 360° orbit around the aircraft):
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 traj_gen/generate_cuboid_orbit.py \
+    --reference_point -2.2 0.4 0.4 \
+    --center 0.0 0.4 0.0 \
+    --orbit_radius 4.5 \
+    --n_frames 50 \
+    --height_offset 1.4 \
+    --lateral_half 0.25 \
+    --height_half 0.25 \
+    --n_samples 10 \
+    --output configs/${case_name}/traj_orbital.json \
+    --no_viz
+```
+
+---
+
+### 2. Run Abstract Rendering (LSR mode)
+
+Abstract rendering for the boeing case uses `abstract_gsplat_pose_estimation.py` which additionally computes the per-pixel affine LSR matrices (`lA`, `uA`, `lb`, `ub`) needed for composition with CROWN.
+
+**Cuboidal:**
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 scripts/abstract_gsplat_pose_estimation.py \
+    --config configs/${case_name}/config.yaml \
+    --odd configs/${case_name}/traj.json
+```
+Output goes to: `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/`
+
+**Orbital** (run with the orbital trajectory, then move output manually):
+```bash
+python3 scripts/abstract_gsplat_pose_estimation.py \
+    --config configs/${case_name}/config.yaml \
+    --odd configs/${case_name}/traj_orbital.json
+
+mkdir -p Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital
+mv Outputs/AbstractImages/boeing787_nerfstudio/cuboid/abstract_*.pt \
+   Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital/
+```
+
+---
+
+### 3. Configure `train_certify_config.yml`
+
+Edit `configs/boeing787_nerfstudio/train_certify_config.yml`:
+
+| Parameter | Cuboidal | Orbital |
+|---|---|---|
+| `abstract_folder` | `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/cuboidal` | `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital` |
+| `num_epochs` | e.g. `80` | e.g. `80` |
+| `use_lsr` | `true` | `true` |
+| `lambda_concrete` | `0.0` | `0.0` |
+| `lambda_abstract` | `1.0` | `1.0` |
+| `bound_method` | `backward` | `backward` |
+
+To **resume from a pretrained checkpoint** or run **certification only** (no training), set:
+```yaml
+num_epochs: 0
+pretrained_checkpoint: "weights/gatenet/boeing787_nerfstudio/<run_datetime>/final_model.pth"
+```
+The script will automatically reuse the checkpoint's directory and resume any partial certification from where it left off.
+
+---
+
+### 4. Train + Certify (LSR)
+
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 scripts/gatenet_train_certify.py \
+    --config configs/${case_name}/train_certify_config.yml
+```
+
+This single script:
+1. Trains GateNet using the CROWN interval-tightness loss on abstract images
+2. Runs LSR certification over all partitions, composing CROWN's per-pixel A matrices with the pixel-level LSR from the abstract renderer
+3. Saves `lsr_certification.pt` (affine pose bounds per partition) under `weights/gatenet/boeing787_nerfstudio/<run_datetime>/`
+
+Certification checkpoints are saved every 50 partitions — if the process is killed (GPU OOM), re-running the command resumes automatically.
+
+---
+
+### 5. Visualize — Cuboidal (Nerfstudio 3D Viewer)
+
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 scripts/visualize_abstract_viser.py \
+    --config configs/${case_name}/train_certify_config.yml \
+    --option ns \
+    --data ../Downloads/view_scene_mini/AbstractRenderingDataCollection/boeing787_sampled/boeing787_nerfstudio \
+    --lsr weights/gatenet/boeing787_nerfstudio/<run_datetime>/lsr_certification.pt \
+    --threshold 0.01
+```
+
+Open `http://localhost:8080`. Green boxes = certified within threshold; red = violated.
+
+**Useful flags:**
+
+| Flag | Effect |
+|---|---|
+| `--threshold 0.01` | Error threshold for green/red coloring (metres) |
+| `--opacity 0.2` | Make cuboids more transparent |
+| `--no-cuboids` | Show scene only, skip certification overlay |
+| `--port 8081` | Change viewer port |
+
+---
+
+### 6. Visualize — Orbital (2D Certification Plot)
+
+For the orbital case a top-down 2D view is more informative than a 3D cuboid overlay. Each arc of the orbit is coloured green (certified) or red (violated), with the aircraft shown at the centre.
+
+```bash
+cd ~/Abstract-Rendering
+export case_name=boeing787_nerfstudio
+python3 scripts/visualize_abstract_viser.py \
+    --config configs/${case_name}/train_certify_config.yml \
+    --lsr weights/gatenet/boeing787_nerfstudio/<run_datetime>/lsr_certification.pt \
+    --threshold 0.01 \
+    --plot2d figures/orbital_certification.png
+```
+
+The four figures below show certification results at decreasing error thresholds — **ε = 20 cm, 10 cm, 2 cm, 0.2 cm**:
+
+| ε = 20 cm | ε = 10 cm |
+|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |
+
+| ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|
+| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+
+As the threshold tightens, more arc segments turn red — reflecting the growing difficulty of certifying fine-grained pose accuracy across all orbital viewpoints.
+
+---
+
 ## Scripts
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.

@@ -16,6 +16,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from datetime import datetime
 import copy
+import gc
 
 grandfather_path = os.path.abspath(os.path.join(__file__, "../.."))
 if grandfather_path not in sys.path:
@@ -68,9 +69,10 @@ class ConcreteImageDataset(Dataset):
 
 class AbstractImageDataset(Dataset):
     """Dataset for abstract images with bound information"""
-    def __init__(self, abstract_folder, target_size=(64, 64)):
+    def __init__(self, abstract_folder, target_size=(64, 64), use_lsr=False):
         self.abstract_folder = abstract_folder
         self.target_size = target_size
+        self.use_lsr = use_lsr
 
         all_pt_files = sorted([f for f in os.listdir(abstract_folder) if f.endswith('.pt')])
 
@@ -98,26 +100,43 @@ class AbstractImageDataset(Dataset):
         upper_img = data['upper']  # [H, W, 3]
         X_lower = data['lower_rel']  # [3] GT cuboid lower bound on relative pose
         X_upper = data['upper_rel']  # [3] GT cuboid upper bound on relative pose
-        
-        if lower_img.shape[0] != self.target_size[1] or lower_img.shape[1] != self.target_size[0]:
+
+        need_resize = (lower_img.shape[0] != self.target_size[1] or
+                       lower_img.shape[1] != self.target_size[0])
+
+        if self.use_lsr:
+            # LSR mode: pixel A matrices are tied to image spatial layout — no resize allowed
+            if need_resize:
+                raise ValueError(
+                    f"use_lsr=True but record {self.pt_files[idx]} has size "
+                    f"{lower_img.shape[:2]} vs target {self.target_size}. "
+                    "Set target_size to match the record resolution."
+                )
+            lA_px = data['lA']   # [H, W, 3, n_x]
+            uA_px = data['uA']
+            lb_px = data['lb']   # [H, W, 3]
+            ub_px = data['ub']
+            xl    = data['xl']   # [n_x]
+            xu    = data['xu']
+
+            lower_img = lower_img.permute(2, 0, 1)  # [3, H, W]
+            upper_img = upper_img.permute(2, 0, 1)
+            return lower_img, upper_img, X_lower, X_upper, lA_px, uA_px, lb_px, ub_px, xl, xu
+
+        if need_resize:
             lower_img = F.interpolate(
                 lower_img.permute(2, 0, 1).unsqueeze(0),
                 size=(self.target_size[1], self.target_size[0]),
-                mode='bilinear',
-                align_corners=False
+                mode='bilinear', align_corners=False
             ).squeeze(0).permute(1, 2, 0)
-            
             upper_img = F.interpolate(
                 upper_img.permute(2, 0, 1).unsqueeze(0),
                 size=(self.target_size[1], self.target_size[0]),
-                mode='bilinear',
-                align_corners=False
+                mode='bilinear', align_corners=False
             ).squeeze(0).permute(1, 2, 0)
 
-        # Convert images to [3, H, W] format
         lower_img = lower_img.permute(2, 0, 1)  # [3, H, W]
-        upper_img = upper_img.permute(2, 0, 1)  # [3, H, W]
-        
+        upper_img = upper_img.permute(2, 0, 1)
         return lower_img, upper_img, X_lower, X_upper
 
 
@@ -128,6 +147,37 @@ class AbstractImageDataset(Dataset):
 def concrete_loss(predictions, targets):
     """MSE loss for concrete images"""
     return nn.MSELoss()(predictions, targets)
+
+
+def lsr_loss(pose_lA, pose_lb_bias, pose_uA, pose_ub_bias, xl, xu, X_lower, X_upper):
+    """
+    Soundness loss for LSR training.
+
+    Certified worst-case bounds over x ∈ [xl, xu]:
+        cert_worst_upper[i] = relu(pose_uA[i]) @ xu - relu(-pose_uA[i]) @ xl + pose_ub_bias[i]
+        cert_worst_lower[i] = relu(pose_lA[i]) @ xl - relu(-pose_lA[i]) @ xu + pose_lb_bias[i]
+
+    Loss penalises violations where the certified range does not contain [X_lower, X_upper].
+
+    Args:
+        pose_lA, pose_uA : [B, n_out, n_x]
+        pose_lb_bias, pose_ub_bias : [B, n_out]
+        xl, xu           : [B, n_x]   per-sample perturbation bounds
+        X_lower, X_upper : [B, n_out] GT relative pose bounds
+    """
+    # xu/xl: [B, n_x] → [B, 1, n_x] to broadcast over n_out
+    xl_ = xl.unsqueeze(1)
+    xu_ = xu.unsqueeze(1)
+
+    # Width of certified error interval at worst-case x ∈ [xl, xu]:
+    # gap(x) = (pose_uA - pose_lA)·x + (pose_ub - pose_lb)
+    # max over x: relu(diff_A) @ xu - relu(-diff_A) @ xl + (pose_ub - pose_lb)
+    diff_A    = pose_uA - pose_lA                                    # [B, n_out, n_x]
+    worst_gap = (torch.relu( diff_A) * xu_ -
+                 torch.relu(-diff_A) * xl_).sum(dim=-1) \
+              + (pose_ub_bias - pose_lb_bias)                        # [B, n_out]
+
+    return worst_gap.mean()
 
 
 def abstract_loss(Y_lower, Y_upper, X_lower, X_upper, tolerance=0.02):
@@ -152,19 +202,188 @@ def abstract_loss(Y_lower, Y_upper, X_lower, X_upper, tolerance=0.02):
 
 def crown_propagate(model, lower_img, upper_img, bound_method='forward'):
     """
-    Propagate bounds through GateNet using auto_LiRPA with gradients
+    Propagate bounds through GateNet using auto_LiRPA with gradients.
+    Uses patches conv_mode (tight, convolutional structure preserved) for training.
     """
     img_center = (lower_img + upper_img) / 2.0
-    
+
     bound_opts = {'conv_mode': 'patches'}
     lirpa_model = BoundedModule(model, img_center, bound_opts=bound_opts, device=DEVICE)
-    
+
     ptb = PerturbationLpNorm(x_L=lower_img, x_U=upper_img)
     img_ptb = BoundedTensor(img_center, ptb)
-    
-    # NO torch.no_grad() - forward method supports gradients!
+
     Y_lower, Y_upper = lirpa_model.compute_bounds(x=(img_ptb,), method=bound_method)
     return Y_lower, Y_upper
+
+
+_lsr_debug_calls = 0  # module-level counter: print debug only for first 3 calls
+
+def crown_propagate_lsr(model, lower_imgs, upper_imgs, lA_px, uA_px, lb_px, ub_px):
+    """
+    LSR-aware bound propagation for training — single batched CROWN pass.
+
+    1. Run CROWN (conv_mode='matrix', return_A=True) on the full batch
+    2. Compose per-sample A matrices with the pixel LSR via batched matmul
+    3. Return pose A matrices used in lsr_loss
+
+    Args:
+        lower_imgs, upper_imgs : [B, 3, H, W]
+        lA_px, uA_px           : [B, H, W, 3, n_x]
+        lb_px, ub_px           : [B, H, W, 3]
+
+    Returns:
+        pose_lA, pose_uA           : [B, n_out, n_x]
+        pose_lb_bias, pose_ub_bias : [B, n_out]
+    """
+    B       = lower_imgs.shape[0]
+    n_x     = lA_px.shape[4]
+    n_pixels = lA_px.shape[1] * lA_px.shape[2] * lA_px.shape[3]  # C*H*W
+
+    img_center = 0.5 * (lower_imgs + upper_imgs)
+
+    ptb     = PerturbationLpNorm(x_L=lower_imgs, x_U=upper_imgs)
+    img_ptb = BoundedTensor(img_center, ptb)
+
+    # conv_mode='matrix': full dense A at input — required for composition with lA_px
+    lirpa_model = BoundedModule(model, img_center,
+                                bound_opts={"conv_mode": "matrix"}, device=DEVICE)
+
+    # Specify which A matrices to return: output → input
+    needed_A = {lirpa_model.output_name[0]: [lirpa_model.input_name[0]]}
+
+    # No torch.no_grad() — gradients must flow through A matrices to update weights
+    out_lb, out_ub, A_dict = lirpa_model.compute_bounds(
+        x=(img_ptb,), method="backward", return_A=True, needed_A_dict=needed_A
+    )
+
+    # Access: A_dict[output_name][input_name] → {lA, uA, lbias, ubias}
+    A_entry = A_dict[lirpa_model.output_name[0]][lirpa_model.input_name[0]]
+    # [B, n_out, C, H, W] → [B, n_out, n_pixels]
+    lA_net    = A_entry["lA"].reshape(B, -1, n_pixels)
+    uA_net    = A_entry["uA"].reshape(B, -1, n_pixels)
+    lbias_net = A_entry["lbias"]   # [B, n_out] — constant term in CROWN linear bound
+    ubias_net = A_entry["ubias"]
+    n_out  = lA_net.shape[1]
+
+    # Pixel LSR: [B, H, W, 3, n_x] → [B, 3, H, W, n_x] → [B, n_pixels, n_x]
+    lA_r = lA_px.permute(0, 3, 1, 2, 4).reshape(B, n_pixels, n_x)
+    uA_r = uA_px.permute(0, 3, 1, 2, 4).reshape(B, n_pixels, n_x)
+    lb_r = lb_px.permute(0, 3, 1, 2).reshape(B, n_pixels)     # [B, n_pixels]
+    ub_r = ub_px.permute(0, 3, 1, 2).reshape(B, n_pixels)
+
+    # Lower bound composition — batched matmul via bmm
+    lA_pos = torch.relu( lA_net)   # [B, n_out, n_pixels]
+    lA_neg = torch.relu(-lA_net)
+    pose_lA      = torch.bmm(lA_pos, lA_r) - torch.bmm(lA_neg, uA_r)          # [B, n_out, n_x]
+    pose_lb_bias = (lA_pos * lb_r.unsqueeze(1)).sum(-1) \
+                 - (lA_neg * ub_r.unsqueeze(1)).sum(-1) + lbias_net             # [B, n_out]
+
+    # Upper bound composition
+    uA_pos = torch.relu( uA_net)
+    uA_neg = torch.relu(-uA_net)
+    pose_uA      = torch.bmm(uA_pos, uA_r) - torch.bmm(uA_neg, lA_r)          # [B, n_out, n_x]
+    pose_ub_bias = (uA_pos * ub_r.unsqueeze(1)).sum(-1) \
+                 - (uA_neg * lb_r.unsqueeze(1)).sum(-1) + ubias_net             # [B, n_out]
+
+    global _lsr_debug_calls
+    if _lsr_debug_calls < 1:
+        _lsr_debug_calls += 1
+        tqdm.write(f"[DEBUG] lA_net requires_grad={lA_net.requires_grad}, grad_fn={lA_net.grad_fn}")
+        tqdm.write(f"[DEBUG] lbias_net requires_grad={lbias_net.requires_grad}, grad_fn={lbias_net.grad_fn}")
+        tqdm.write(f"[DEBUG] pose_lA requires_grad={pose_lA.requires_grad}, grad_fn={pose_lA.grad_fn}")
+        tqdm.write(f"[DEBUG] pose_lb_bias requires_grad={pose_lb_bias.requires_grad}, grad_fn={pose_lb_bias.grad_fn}")
+
+    return pose_lA, pose_lb_bias, pose_uA, pose_ub_bias
+
+
+def make_lirpa_model(model, image_shape, device):
+    """
+    Create a BoundedModule for GateNet once and reuse across all certification calls.
+    image_shape: (C, H, W)
+    """
+    dummy = torch.zeros(1, *image_shape, device=device)
+    lirpa_model = BoundedModule(model, dummy,
+                                bound_opts={"conv_mode": "matrix"}, device=device)
+    return lirpa_model
+
+
+def crown_certify_lsr(lirpa_model, record, device):
+    """
+    Certify a single abstract record with Linear Set Representation.
+
+    Composes CROWN's per-pixel A matrices with the pixel LSR stored in the
+    record to produce affine pose bounds w.r.t. the original perturbation x:
+
+        lA_pose · x + lb_pose  ≤  pose  ≤  uA_pose · x + ub_pose,   x ∈ [-1,1]^n_x
+
+    lirpa_model: pre-created BoundedModule (reused across all records to save memory).
+
+    Returns:
+        out_lb      [1, n_out]   interval lower bound on pose
+        out_ub      [1, n_out]   interval upper bound on pose
+        pose_lA     [n_out, n_x] or None if record has no LSR
+        pose_lb_bias[n_out]      or None
+        pose_uA     [n_out, n_x] or None
+        pose_ub_bias[n_out]      or None
+    """
+    lower_img = record["lower"].to(device)   # [H, W, 3]
+    upper_img = record["upper"].to(device)
+    lA_px = record.get("lA")                 # [H, W, 3, n_x] or None
+    uA_px = record.get("uA")
+    lb_px = record.get("lb")                 # [H, W, 3] or None
+    ub_px = record.get("ub")
+
+    # Reorder to [1, 3, H, W] for GateNet
+    lower_r = lower_img.permute(2, 0, 1).unsqueeze(0)
+    upper_r = upper_img.permute(2, 0, 1).unsqueeze(0)
+    img_center = 0.5 * (lower_r + upper_r)
+
+    ptb = PerturbationLpNorm(x_L=lower_r, x_U=upper_r)
+    img_ptb = BoundedTensor(img_center, ptb)
+
+    needed_A = {lirpa_model.output_name[0]: [lirpa_model.input_name[0]]}
+    out_lb, out_ub, A_dict = lirpa_model.compute_bounds(
+        x=(img_ptb,), method="backward", return_A=True, needed_A_dict=needed_A
+    )
+
+    # ── Compose network A matrices with pixel LSR ─────────────────────────────
+    pose_lA = pose_lb_bias = pose_uA = pose_ub_bias = None
+    if lA_px is not None:
+        # A_dict[output_name][input_name] → {lA, uA, lbias, ubias}
+        A_entry  = A_dict[lirpa_model.output_name[0]][lirpa_model.input_name[0]]
+        lA_net   = A_entry["lA"].squeeze(0)    # [n_out, C, H, W]
+        uA_net   = A_entry["uA"].squeeze(0)
+        lbias_net = A_entry["lbias"].squeeze(0) # [n_out]
+        ubias_net = A_entry["ubias"].squeeze(0)
+        n_out    = lA_net.shape[0]
+        n_pixels = lA_net[0].numel()
+        n_x      = lA_px.shape[3]
+        lA_net = lA_net.reshape(n_out, n_pixels)
+        uA_net = uA_net.reshape(n_out, n_pixels)
+
+        # [H, W, 3, n_x] → [3, H, W, n_x] → [C*H*W, n_x]  (matches CHW pixel order)
+        def _px(t):
+            return t.permute(2, 0, 1, 3).reshape(n_pixels, n_x).to(device)
+        def _bias(t):
+            return t.permute(2, 0, 1).reshape(n_pixels).to(device)
+
+        lA_r = _px(lA_px);   uA_r = _px(uA_px)
+        lb_r = _bias(lb_px); ub_r = _bias(ub_px)
+
+        # Lower bound: relu-split on lA_net
+        lA_pos = torch.relu( lA_net)
+        lA_neg = torch.relu(-lA_net)
+        pose_lA      = lA_pos @ lA_r - lA_neg @ uA_r              # [n_out, n_x]
+        pose_lb_bias = lA_pos @ lb_r  - lA_neg @ ub_r + lbias_net # [n_out]
+
+        # Upper bound: relu-split on uA_net
+        uA_pos = torch.relu( uA_net)
+        uA_neg = torch.relu(-uA_net)
+        pose_uA      = uA_pos @ uA_r - uA_neg @ lA_r              # [n_out, n_x]
+        pose_ub_bias = uA_pos @ ub_r  - uA_neg @ lb_r + ubias_net # [n_out]
+
+    return out_lb, out_ub, pose_lA, pose_lb_bias, pose_uA, pose_ub_bias
 
 # ============================================================================
 # REINFORCE Gradient Estimation
@@ -295,8 +514,9 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
     lambda_abstract = config['lambda_abstract']
     bound_method = config['bound_method']
     tolerance = config.get('tolerance', 0.02)
-    use_reinforce = config.get('use_reinforce', False)  # New config option
-    noise_std = config.get('reinforce_noise_std', 0.1)  # New config option
+    use_reinforce = config.get('use_reinforce', False)
+    noise_std = config.get('reinforce_noise_std', 0.1)
+    use_lsr = config.get('use_lsr', False)
     
     concrete_iter = iter(concrete_loader)
     abstract_iter = iter(abstract_loader)
@@ -305,8 +525,8 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
     total_concrete_loss = 0.0
     total_abstract_loss = 0.0
     num_steps = 0
-    
-    num_iters = max(len(concrete_loader), len(abstract_loader))
+
+    num_iters = max(len(concrete_loader), len(abstract_loader)) if concrete_loader else len(abstract_loader)
     pbar = tqdm(range(num_iters), desc=f"Epoch {epoch}")
     
     for step in pbar:
@@ -333,28 +553,40 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
         
         # ===== Abstract Loss (separate step) =====
         try:
-            lower_imgs, upper_imgs, X_lowers, X_uppers = next(abstract_iter)
-            lower_imgs = lower_imgs.to(DEVICE)
-            upper_imgs = upper_imgs.to(DEVICE)
-            X_lowers = X_lowers.to(DEVICE)
-            X_uppers = X_uppers.to(DEVICE)
-            
+            abstract_batch = next(abstract_iter)
+            lower_imgs = abstract_batch[0].to(DEVICE)
+            upper_imgs = abstract_batch[1].to(DEVICE)
+            X_lowers   = abstract_batch[2].to(DEVICE)
+            X_uppers   = abstract_batch[3].to(DEVICE)
+
             optimizer.zero_grad()
-            
-            if use_reinforce:
+
+            if use_lsr:
+                # auto_LiRPA detaches A matrices (requires_grad=False) — cannot
+                # backprop through them.  Train with the differentiable interval
+                # bounds (out_lb / out_ub) over the pixel interval [lower, upper],
+                # which is valid for all x ∈ [xl, xu].
+                # A-matrix composition into the 3×3 pose LSR is done at certification.
+                Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
+                # Tightness loss: minimize certified interval width.
+                # Always > 0 since CROWN overapproximates ReLU activations.
+                loss_a = (Y_upper_pred - Y_lower_pred).mean()
+                (lambda_abstract * loss_a).backward()
+                loss_a_val = loss_a.item()
+            elif use_reinforce:
                 # REINFORCE method: gradients through Y_center only
                 reinforce_loss, loss_a_val = reinforce_abstract_gradient(
-                    model, lower_imgs, upper_imgs, X_lowers, X_uppers, 
+                    model, lower_imgs, upper_imgs, X_lowers, X_uppers,
                     bound_method, noise_std
                 )
                 (lambda_abstract * reinforce_loss).backward()
             else:
-                # Direct method: gradients through CROWN bounds
+                # Direct method: gradients through CROWN interval bounds
                 Y_lower_pred, Y_upper_pred = crown_propagate(model, lower_imgs, upper_imgs, bound_method)
                 loss_a = abstract_loss(Y_lower_pred, Y_upper_pred, X_lowers, X_uppers, tolerance=tolerance)
                 (lambda_abstract * loss_a).backward()
                 loss_a_val = loss_a.item()
-            
+
             optimizer.step()
             
         except StopIteration:
@@ -370,11 +602,11 @@ def train_epoch(model, concrete_loader, abstract_loader, optimizer, config, epoc
         num_steps += 1
         
         # Update progress bar
-        method_str = "REINFORCE" if use_reinforce else "Direct"
+        method_str = "REINFORCE" if use_reinforce else ("LSR" if use_lsr else "Direct")
         pbar.set_postfix({
-            'loss': f'{loss_total_val:.4f}',
-            'loss_c': f'{loss_c_val:.4f}',
-            'loss_a': f'{loss_a_val:.4f}',
+            'loss': f'{loss_total_val:.6f}',
+            'loss_c': f'{loss_c_val:.6f}',
+            'loss_a': f'{loss_a_val:.6f}',
             'method': method_str
         })
     
@@ -397,27 +629,36 @@ def main(config):
     
     # ===== Create Datasets =====
     print("\n=== Loading Datasets ===")
-    concrete_dataset = ConcreteImageDataset(
-        samples_json=config['concrete_samples_json'],
-        image_root=config['concrete_image_root'],
-        target_size=(config['image_width'], config['image_height'])
-    )
     abstract_dataset = AbstractImageDataset(
         abstract_folder=config['abstract_folder'],
-        target_size=(config['image_width'], config['image_height'])
+        target_size=(config['image_width'], config['image_height']),
+        use_lsr=config.get('use_lsr', False)
     )
-    
-    print(f"Concrete samples: {len(concrete_dataset)}")
     print(f"Abstract samples: {len(abstract_dataset)}")
-    
+
+    use_concrete = config.get('lambda_concrete', 0.0) > 0.0
+    if use_concrete:
+        concrete_dataset = ConcreteImageDataset(
+            samples_json=config['concrete_samples_json'],
+            image_root=config['concrete_image_root'],
+            target_size=(config['image_width'], config['image_height'])
+        )
+        print(f"Concrete samples: {len(concrete_dataset)}")
+    else:
+        concrete_dataset = None
+        print("Concrete dataset skipped (lambda_concrete=0)")
+
     # ===== Create DataLoaders =====
-    concrete_loader = DataLoader(
-        concrete_dataset,
-        batch_size=config['batch_size_concrete'],
-        shuffle=True,
-        num_workers=config['num_workers'],
-        pin_memory=True
-    )
+    if use_concrete:
+        concrete_loader = DataLoader(
+            concrete_dataset,
+            batch_size=config['batch_size_concrete'],
+            shuffle=True,
+            num_workers=config['num_workers'],
+            pin_memory=True
+        )
+    else:
+        concrete_loader = []  # empty — train_epoch will skip concrete step
     abstract_loader = DataLoader(
         abstract_dataset,
         batch_size=config['batch_size_abstract'],
@@ -464,10 +705,15 @@ def main(config):
         weight_decay=config['weight_decay']
     )
 
-    # ===== Prepare run directory (timestamped) =====
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # ===== Prepare run directory =====
     base_ckpt_dir = config['checkpoint_dir']
-    run_dir = os.path.join(base_ckpt_dir, timestamp)
+    if config['num_epochs'] == 0 and config.get('pretrained_checkpoint'):
+        # Certify-only: reuse the directory that holds the pretrained checkpoint
+        run_dir = os.path.dirname(os.path.abspath(config['pretrained_checkpoint']))
+        timestamp = os.path.basename(run_dir)
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = os.path.join(base_ckpt_dir, timestamp)
     os.makedirs(run_dir, exist_ok=True)
     print(f"\nCheckpoints, plots, and settings will be saved under: {run_dir}")
 
@@ -508,52 +754,137 @@ def main(config):
             best_state_dict = copy.deepcopy(model.state_dict())
             best_epoch = epoch
 
-    # If best was never updated (should not happen), fall back to final state
+    # If num_epochs=0 (certify-only), use the pretrained model weights directly
     if best_state_dict is None:
         best_state_dict = model.state_dict()
-        best_epoch = config['num_epochs']
+        best_epoch = 0
 
-    # Save best model (latest) at the end
-    best_path = os.path.join(run_dir, 'latest.pth')
-    torch.save({
-        'epoch': best_epoch,
-        'model_state_dict': best_state_dict,
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': best_loss,
-        'config': config
-    }, best_path)
+    if config['num_epochs'] > 0:
+        # Save best model
+        best_path = os.path.join(run_dir, 'latest.pth')
+        torch.save({
+            'epoch': best_epoch,
+            'model_state_dict': best_state_dict,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': best_loss,
+            'config': config
+        }, best_path)
 
-    # Save final model (last epoch) at the end
-    final_path = os.path.join(run_dir, 'final_model.pth')
-    torch.save({
-        'epoch': config['num_epochs'],
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': losses['total'],
-        'config': config
-    }, final_path)
-    print(f"\n=== Training Complete ===")
-    print(f"Final model saved: {final_path}")
-    print(f"Best model (epoch={best_epoch}, loss={best_loss:.6f}): {best_path}")
+        # Save final model
+        final_path = os.path.join(run_dir, 'final_model.pth')
+        torch.save({
+            'epoch': config['num_epochs'],
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': losses['total'],
+            'config': config
+        }, final_path)
+        print(f"\n=== Training Complete ===")
+        print(f"Final model saved: {final_path}")
+        print(f"Best model (epoch={best_epoch}, loss={best_loss:.6f}): {best_path}")
 
-    # ===== Plot loss curves over epochs =====
-    epochs = list(range(1, config['num_epochs'] + 1))
-    plt.figure()
-    eps = 1e-8
-    plt.plot(epochs, [max(v, eps) for v in total_history], label='total loss')
-    plt.plot(epochs, [max(v, eps) for v in concrete_history], label='concrete loss')
-    plt.plot(epochs, [max(v, eps) for v in abstract_history], label='abstract loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss (log scale)')
-    plt.yscale('log')
-    plt.title('Training losses (log scale)')
-    plt.legend()
+        # Plot loss curves
+        epochs_list = list(range(1, config['num_epochs'] + 1))
+        plt.figure()
+        eps = 1e-8
+        plt.plot(epochs_list, [max(v, eps) for v in total_history],    label='total loss')
+        plt.plot(epochs_list, [max(v, eps) for v in concrete_history], label='concrete loss')
+        plt.plot(epochs_list, [max(v, eps) for v in abstract_history], label='abstract loss')
+        plt.xlabel('Epoch'); plt.ylabel('Loss (log scale)'); plt.yscale('log')
+        plt.title('Training losses (log scale)'); plt.legend()
+        plot_filename = f"{config['bound_method']}_lambda{config['lambda_concrete']}.png"
+        plot_path = os.path.join(run_dir, plot_filename)
+        plt.savefig(plot_path, bbox_inches='tight'); plt.close()
+        print(f"Loss curves saved: {plot_path}")
+    else:
+        best_path = config['pretrained_checkpoint']
+        print(f"\n=== Skipped Training (num_epochs=0) — using {best_path} ===")
 
-    plot_filename = f"{config['bound_method']}_lambda{config['lambda_concrete']}.png"
-    plot_path = os.path.join(run_dir, plot_filename)
-    plt.savefig(plot_path, bbox_inches='tight')
-    plt.close()
-    print(f"Loss curves saved: {plot_path}")
+    # ===== LSR Certification Pass =====
+    # Load the best model and run crown_certify_lsr over the abstract folder.
+    # Produces affine pose bounds w.r.t. the original cuboid perturbation x.
+    print("\n=== LSR Certification ===")
+    best_model = GateNet(model_config).to(DEVICE)
+    best_ckpt = torch.load(best_path)
+    best_model.load_state_dict(best_ckpt["model_state_dict"])
+    best_model.eval()
+
+    abstract_folder = config["abstract_folder"]
+    all_pt_files = sorted([f for f in os.listdir(abstract_folder) if f.startswith("abstract_") and f.endswith(".pt")])
+
+    cert_out_lb_all      = []
+    cert_out_ub_all      = []
+    cert_pose_lA_all     = []
+    cert_pose_lb_bias_all= []
+    cert_pose_uA_all     = []
+    cert_pose_ub_bias_all= []
+    has_lsr = True
+
+    # Certify on GPU — BoundedModule created ONCE and reused; clear cache each step
+    cert_device = DEVICE
+    image_shape = (3, config['image_height'], config['image_width'])
+    lirpa_cert = make_lirpa_model(best_model, image_shape, cert_device)
+
+    cert_path = os.path.join(run_dir, "lsr_certification.pt")
+    save_every = 50  # save partial results every N partitions
+
+    # Resume from existing checkpoint if present
+    resume_from = 0
+    if os.path.exists(cert_path):
+        existing = torch.load(cert_path, map_location='cpu', weights_only=False)
+        resume_from = existing["out_lb"].shape[0]
+        cert_out_lb_all      = list(existing["out_lb"])
+        cert_out_ub_all      = list(existing["out_ub"])
+        if "pose_lA" in existing:
+            cert_pose_lA_all      = list(existing["pose_lA"])
+            cert_pose_lb_bias_all = list(existing["pose_lb_bias"])
+            cert_pose_uA_all      = list(existing["pose_uA"])
+            cert_pose_ub_bias_all = list(existing["pose_ub_bias"])
+        print(f"  Resuming certification from partition {resume_from}/{len(all_pt_files)}")
+
+    for i, fname in enumerate(all_pt_files):
+        if i < resume_from:
+            continue
+        rec = torch.load(os.path.join(abstract_folder, fname), weights_only=False)
+        out_lb, out_ub, pose_lA, pose_lb_bias, pose_uA, pose_ub_bias = \
+            crown_certify_lsr(lirpa_cert, rec, cert_device)
+        cert_out_lb_all.append(out_lb.squeeze(0).cpu())
+        cert_out_ub_all.append(out_ub.squeeze(0).cpu())
+        if pose_lA is not None:
+            cert_pose_lA_all.append(pose_lA.cpu())
+            cert_pose_lb_bias_all.append(pose_lb_bias.cpu())
+            cert_pose_uA_all.append(pose_uA.cpu())
+            cert_pose_ub_bias_all.append(pose_ub_bias.cpu())
+        else:
+            has_lsr = False
+
+        # Free GPU memory each step
+        gc.collect()
+        if cert_device.type == 'cuda':
+            torch.cuda.empty_cache()
+
+        if (i + 1) % save_every == 0 or (i + 1) == len(all_pt_files):
+            cert_results = {
+                "out_lb": torch.stack(cert_out_lb_all,  dim=0),
+                "out_ub": torch.stack(cert_out_ub_all,  dim=0),
+            }
+            if has_lsr and cert_pose_lA_all:
+                cert_results["pose_lA"]      = torch.stack(cert_pose_lA_all,       dim=0)
+                cert_results["pose_lb_bias"] = torch.stack(cert_pose_lb_bias_all,  dim=0)
+                cert_results["pose_uA"]      = torch.stack(cert_pose_uA_all,       dim=0)
+                cert_results["pose_ub_bias"] = torch.stack(cert_pose_ub_bias_all,  dim=0)
+            torch.save(cert_results, cert_path)
+            print(f"  [{i+1}/{len(all_pt_files)}] checkpoint saved → {cert_path}")
+
+            # Recreate BoundedModule to flush accumulated intermediate bound caches
+            if (i + 1) < len(all_pt_files):
+                del lirpa_cert
+                gc.collect()
+                if cert_device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                lirpa_cert = make_lirpa_model(best_model, image_shape, cert_device)
+
+    print(f"LSR certification complete: {cert_path}")
 
 
 # ============================================================================
