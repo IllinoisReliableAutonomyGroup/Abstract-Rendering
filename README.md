@@ -278,9 +278,6 @@ python3 scripts/visualize_abstract_viser.py \
 
 Open `http://localhost:8080` in your browser. **Green** = certified, **red** = violated.
 
-![Viser Visualization](figures/vis_plane.png)
-
-
 **Useful flags:**
 
 | Flag | Effect |
@@ -322,33 +319,14 @@ Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
 
 ---
 
-### 1. Generate the Trajectory
+### 1. Prepare Trajectory Files
 
-**Cuboidal trajectory** (standard path with lateral + vertical perturbations):
-```bash
-cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
-python3 traj_gen/generate_traj_ns.py \
-    --config configs/${case_name}/config.yaml \
-    --output configs/${case_name}/traj.json
-```
+Trajectory generation scripts are not included in this repository. Generate the trajectory JSON files using your own tools and place them at:
 
-**Orbital trajectory** (full 360° orbit around the aircraft):
-```bash
-cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
-python3 traj_gen/generate_cuboid_orbit.py \
-    --reference_point -2.2 0.4 0.4 \
-    --center 0.0 0.4 0.0 \
-    --orbit_radius 4.5 \
-    --n_frames 50 \
-    --height_offset 1.4 \
-    --lateral_half 0.25 \
-    --height_half 0.25 \
-    --n_samples 10 \
-    --output configs/${case_name}/traj_orbital.json \
-    --no_viz
-```
+- **Cuboidal:** `configs/boeing787_nerfstudio/traj.json`
+- **Orbital:** `configs/boeing787_nerfstudio/traj_orbital.json`
+
+Each entry in the JSON must include `pose`, `pert_type: "cuboid"`, `cuboidal_halflen`, `lower_rel`, `upper_rel`, and `gate` fields. For the orbital case, ensure `cuboidal_halflen` is non-zero in both dimensions (lateral and vertical) — a zero halflen will produce invalid LSR matrices.
 
 ---
 
@@ -433,6 +411,8 @@ python3 scripts/visualize_abstract_viser.py \
 ```
 
 Open `http://localhost:8080`. Green boxes = certified within threshold; red = violated.
+
+![Viser Visualization](figures/vis_plane.png)
 
 **Useful flags:**
 
