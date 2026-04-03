@@ -6,7 +6,7 @@ concrete_image_root: "Outputs/RenderedImages/train_data_new/cuboid"
 abstract_folder: "Outputs/AbstractImages/train_data_new/cuboid"
 checkpoint_dir: "weights/gatenet/train_data_new"
 pretrained_checkpoint: null  # or "path/to/checkpoint.pth"
-run_datetime: "20260226_144648"
+run_datetime: "20260226_105336"
 
 # ============================================================================
 # Model Config
@@ -29,7 +29,7 @@ num_workers: 4
 # ============================================================================
 lambda_concrete: 0.8
 lambda_abstract: 0.2
-tolerance: 0.25
+tolerance: 0.2
 
 # ============================================================================
 # Optimizer Config

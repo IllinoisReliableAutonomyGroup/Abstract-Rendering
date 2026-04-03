@@ -16,6 +16,15 @@ Follow the steps below to set up the environment, gather scene data, and run the
 ## Workflow
 ![](figures/block_backup.png)
 
+---
+
+## Demos
+
+| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+|:---:|:---:|:---:|
+| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) |
+
+---
 
 ## Setup
 
@@ -186,84 +195,6 @@ where green indicates certified regions; red denotes potential
 violations; blue indicates gates.
 
 ---
-### Set-Valued Training
-
-Train GateNet on **abstract (set-valued) images** — per-pixel lower/upper bound images produced by the abstract renderer — for certifiably correct pose estimation across entire pose cells.
-
-#### 1. Run Abstract Gsplat Pose Estimation
-
-Partitions the ODD into cuboid cells, runs abstract rendering, and saves per-cell relative pose bounds (lower/upper w.r.t. the reference point) used for training and certification.
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/abstract_gsplat_pose_estimation.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
-```
-
-Output: `Outputs/AbstractImages/${case_name}/cuboid/`
-
----
-
-#### 2. Prepare the data
-
-Download pre-computed abstract images from [Google Drive](https://drive.google.com/drive/u/2/folders/1jWmVoXZKHr2ds9ObGoWNHWzfFTKjlJs3) and place under:
-
-```
-~/Abstract-Rendering/Outputs/AbstractImages/${case_name}/cuboid/
-```
-
-For the Nerfstudio viewer, also download the U-turn dataset and place at:
-
-```
-~/Abstract-Rendering/data/uturn/
-```
-
----
-
-#### 3. Configure `train_certify_config.yml`
-
-Set the following fields in `configs/${case_name}/train_certify_config.yml`:
-
-| Parameter | Description |
-|---|---|
-| `abstract_folder` | Path to cuboid `.pt` abstract image files |
-| `concrete_image_root` | Path to concrete rendered images |
-| `checkpoint_dir` | Where trained GateNet weights are saved |
-| `image_width` / `image_height` | Must match abstract images (default `32×32`) |
-| `num_epochs` | Training epochs (default `65`) |
-| `batch_size_concrete` / `batch_size_abstract` | Reduce if GPU OOM |
-| `lambda_concrete` / `lambda_abstract` | Loss weights — must sum to 1.0 |
-| `tolerance` | Allowed pose estimation error (default `0.25`) |
-| `learning_rate` | Adam learning rate (default `0.0005`) |
-| `weight_decay` | L2 regularisation (default `0.00001`) |
-| `bound_method` | CROWN method — `"backward"` recommended |
-| `save_every` | Save checkpoint every N epochs |
-
-#### 4. Train
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/gatenet_train_certify.py --config configs/${case_name}/train_certify_config.yml
-```
-
-Note the `run_datetime` printed at the start — needed for certification.
-
----
-
-### Test GateNet on Abstract Images (CROWN Certification)
-
-Set `run_datetime` and `tolerance` in `configs/${case_name}/train_certify_config.yml`, then run:
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/test_gatenet_abstract.py \
-    --config configs/${case_name}/train_certify_config.yml \
-    --traj configs/${case_name}/traj.yaml
-```
-
----
 
 ### Visualize Certification in the Nerfstudio Viewer
 
@@ -286,15 +217,11 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 | `--no-cuboids` | Show the scene only, skip CROWN and cuboid overlay |
 | `--port 8081` | Change the viewer port if 8080 is already in use |
 
----
-
-### Set-Valued Training Results — `train_data_new` (Hybrid)
-
-The hybrid training approach combines concrete and abstract losses with CROWN certification. The three figures below show certification results under tolerances **ε = 0.05 m**, **0.10 m**, and **0.20 m** respectively. Green regions are certified; red regions have potential violations; blue markers indicate gate positions.
+**Results — Train Data New:**
 
 | ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
 |:---:|:---:|:---:|
-| ![h1](figures/h1.png) | ![h2](figures/h2.png) | ![h3](figures/h3.png) |
+| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
 
 ---
 
@@ -318,6 +245,9 @@ Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
 > ```
 
 ---
+
+<details>
+<summary><b>Show pipeline commands (trajectory, abstract rendering, training, certification)</b></summary>
 
 ### 1. Prepare Trajectory Files
 
@@ -395,6 +325,8 @@ This single script:
 
 Certification checkpoints are saved every 50 partitions — if the process is killed (GPU OOM), re-running the command resumes automatically.
 
+</details>
+
 ---
 
 ### 5. Visualize — Cuboidal (Nerfstudio 3D Viewer)
@@ -412,8 +344,6 @@ python3 scripts/visualize_abstract_viser.py \
 
 Open `http://localhost:8080`. Green boxes = certified within threshold; red = violated.
 
-![Viser Visualization](figures/vis_plane.png)
-
 **Useful flags:**
 
 | Flag | Effect |
@@ -422,6 +352,12 @@ Open `http://localhost:8080`. Green boxes = certified within threshold; red = vi
 | `--opacity 0.2` | Make cuboids more transparent |
 | `--no-cuboids` | Show scene only, skip certification overlay |
 | `--port 8081` | Change viewer port |
+
+**Results — Boeing 787 Cuboidal:**
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) | ![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
 
 ---
 
@@ -453,7 +389,9 @@ As the threshold tightens, more arc segments turn red — reflecting the growing
 
 ---
 
-## Scripts
+<details>
+<summary><b>Scripts</b></summary>
+
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
 - Reads `configs/${case_name}/config.yaml` for parameters set by the user and `configs/${case_name}/traj.json` for the pose information.
@@ -497,6 +435,8 @@ As the threshold tightens, more arc segments turn red — reflecting the growing
   - `traj.yaml` / `traj.json`: trajectory configuration and generated waypoint/pose file.
   - Optional downstream configs such as `gatenet.yml` and `vis_absimg.yaml`.
 - When creating a new case, you should create a new folder under `configs/` (for example `configs/my_case/`) and add a new `config.yaml` and trajectory files there, rather than modifying the existing case folders.
+
+</details>
 
 ## Citation
 
