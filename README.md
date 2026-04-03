@@ -22,7 +22,7 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 | Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
 |:---:|:---:|:---:|
-| <video src="figures/train_data_new.mov" controls width="100%"></video> | <video src="figures/cuboidal.mov" controls width="100%"></video> | <video src="figures/orbital.mov" controls width="100%"></video> |
+| <video src="figures/train_data_new.mp4" controls width="100%"></video> | <video src="figures/cuboidal.mp4" controls width="100%"></video> | <video src="figures/orbital.mp4" controls width="100%"></video> |
 
 ---
 
