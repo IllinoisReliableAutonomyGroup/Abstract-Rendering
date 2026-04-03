@@ -16,6 +16,8 @@ Follow the steps below to set up the environment, gather scene data, and run the
 ## Workflow
 ![](figures/block_backup.png)
 
+![Viser Visualization](figures/vis_plane.png)
+
 ---
 
 ## Setup
@@ -201,8 +203,6 @@ python3 scripts/visualize_abstract_viser.py \
 
 Open `http://localhost:8080` in your browser. **Green** = certified, **red** = violated.
 
-![Viser Visualization](figures/vis_plane.png)
-
 **Useful flags:**
 
 | Flag | Effect |
@@ -337,8 +337,6 @@ python3 scripts/visualize_abstract_viser.py \
 ```
 
 Open `http://localhost:8080`. Green boxes = certified within threshold; red = violated.
-
-![Viser Visualization](figures/vis_plane.png)
 
 **Useful flags:**
 
