@@ -18,14 +18,6 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 
-## Demos
-
-| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
-|:---:|:---:|:---:|
-| <video src="figures/train_data_new.mp4" controls width="100%"></video> | <video src="figures/cuboidal.mp4" controls width="100%"></video> | <video src="figures/orbital.mp4" controls width="100%"></video> |
-
----
-
 ## Setup
 
 ### 0. (Optional) Install Nerfstudio
@@ -208,6 +200,8 @@ python3 scripts/visualize_abstract_viser.py \
 ```
 
 Open `http://localhost:8080` in your browser. **Green** = certified, **red** = violated.
+
+![Viser Visualization](figures/vis_plane.png)
 
 **Useful flags:**
 
