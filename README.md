@@ -427,6 +427,7 @@ The four figures below show certification results at decreasing error thresholds
 |:---:|:---:|:---:|:---:|
 | ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
 
+
 As the threshold tightens, more arc segments turn red — reflecting the growing difficulty of certifying fine-grained pose accuracy across all orbital viewpoints.
 
 </details>
