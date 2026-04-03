@@ -16,7 +16,13 @@ Follow the steps below to set up the environment, gather scene data, and run the
 ## Workflow
 ![](figures/block_backup.png)
 
-![Viser Visualization](figures/vis_plane.png)
+---
+
+## Demos
+
+| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+|:---:|:---:|:---:|
+| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) |
 
 ---
 
