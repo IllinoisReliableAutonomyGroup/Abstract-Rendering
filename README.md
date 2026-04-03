@@ -16,6 +16,35 @@ Follow the steps below to set up the environment, gather scene data, and run the
 ## Workflow
 ![](figures/block_backup.png)
 
+---
+
+## Results
+
+### Train Data New
+
+<video src="figures/train_data_new.mov" controls width="100%"></video>
+
+| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
+|:---:|:---:|:---:|
+| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
+
+### Boeing 787 — Cuboidal
+
+<video src="figures/cuboidal.mov" controls width="100%"></video>
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) | ![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+
+### Boeing 787 — Orbital
+
+<video src="figures/orbital.mov" controls width="100%"></video>
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) | ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+
+---
 
 ## Setup
 
@@ -186,84 +215,6 @@ where green indicates certified regions; red denotes potential
 violations; blue indicates gates.
 
 ---
-### Set-Valued Training
-
-Train GateNet on **abstract (set-valued) images** — per-pixel lower/upper bound images produced by the abstract renderer — for certifiably correct pose estimation across entire pose cells.
-
-#### 1. Run Abstract Gsplat Pose Estimation
-
-Partitions the ODD into cuboid cells, runs abstract rendering, and saves per-cell relative pose bounds (lower/upper w.r.t. the reference point) used for training and certification.
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/abstract_gsplat_pose_estimation.py --config configs/${case_name}/config.yaml --odd configs/${case_name}/traj.json
-```
-
-Output: `Outputs/AbstractImages/${case_name}/cuboid/`
-
----
-
-#### 2. Prepare the data
-
-Download pre-computed abstract images from [Google Drive](https://drive.google.com/drive/u/2/folders/1jWmVoXZKHr2ds9ObGoWNHWzfFTKjlJs3) and place under:
-
-```
-~/Abstract-Rendering/Outputs/AbstractImages/${case_name}/cuboid/
-```
-
-For the Nerfstudio viewer, also download the U-turn dataset and place at:
-
-```
-~/Abstract-Rendering/data/uturn/
-```
-
----
-
-#### 3. Configure `train_certify_config.yml`
-
-Set the following fields in `configs/${case_name}/train_certify_config.yml`:
-
-| Parameter | Description |
-|---|---|
-| `abstract_folder` | Path to cuboid `.pt` abstract image files |
-| `concrete_image_root` | Path to concrete rendered images |
-| `checkpoint_dir` | Where trained GateNet weights are saved |
-| `image_width` / `image_height` | Must match abstract images (default `32×32`) |
-| `num_epochs` | Training epochs (default `65`) |
-| `batch_size_concrete` / `batch_size_abstract` | Reduce if GPU OOM |
-| `lambda_concrete` / `lambda_abstract` | Loss weights — must sum to 1.0 |
-| `tolerance` | Allowed pose estimation error (default `0.25`) |
-| `learning_rate` | Adam learning rate (default `0.0005`) |
-| `weight_decay` | L2 regularisation (default `0.00001`) |
-| `bound_method` | CROWN method — `"backward"` recommended |
-| `save_every` | Save checkpoint every N epochs |
-
-#### 4. Train
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/gatenet_train_certify.py --config configs/${case_name}/train_certify_config.yml
-```
-
-Note the `run_datetime` printed at the start — needed for certification.
-
----
-
-### Test GateNet on Abstract Images (CROWN Certification)
-
-Set `run_datetime` and `tolerance` in `configs/${case_name}/train_certify_config.yml`, then run:
-
-```bash
-cd ~/Abstract-Rendering
-export case_name=train_data_new
-python3 scripts/test_gatenet_abstract.py \
-    --config configs/${case_name}/train_certify_config.yml \
-    --traj configs/${case_name}/traj.yaml
-```
-
----
 
 ### Visualize Certification in the Nerfstudio Viewer
 
@@ -288,16 +239,6 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 
 ---
 
-### Set-Valued Training Results — `train_data_new` (Hybrid)
-
-The hybrid training approach combines concrete and abstract losses with CROWN certification. The three figures below show certification results under tolerances **ε = 0.05 m**, **0.10 m**, and **0.20 m** respectively. Green regions are certified; red regions have potential violations; blue markers indicate gate positions.
-
-| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
-|:---:|:---:|:---:|
-| ![h1](figures/h1.png) | ![h2](figures/h2.png) | ![h3](figures/h3.png) |
-
----
-
 ## Boeing 787 — Pose Estimation with LSR Certification
 
 This section covers the full pipeline for the **Boeing 787 Nerfstudio** scene using **Linear Set Representation (LSR)** — a tighter certification method that composes CROWN's per-pixel affine bounds with the abstract renderer's pixel-level affine LSR to produce certified affine pose bounds as a function of the original cuboid perturbation.
@@ -318,6 +259,9 @@ Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
 > ```
 
 ---
+
+<details>
+<summary><b>Show pipeline commands (trajectory, abstract rendering, training, certification)</b></summary>
 
 ### 1. Prepare Trajectory Files
 
@@ -394,6 +338,8 @@ This single script:
 3. Saves `lsr_certification.pt` (affine pose bounds per partition) under `weights/gatenet/boeing787_nerfstudio/<run_datetime>/`
 
 Certification checkpoints are saved every 50 partitions — if the process is killed (GPU OOM), re-running the command resumes automatically.
+
+</details>
 
 ---
 
