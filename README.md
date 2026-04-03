@@ -21,7 +21,7 @@ Follow the steps below to set up the environment, gather scene data, and run the
 ---
 
 ## Demos 
-Green for success, Red for fail, $\epsilon$ for user-specific error tolerance.
+For certification results: green indicates success, red indicates failure, and $\epsilon$ denotes the user-defined error tolerance (specific to pose estimation tasks).
 
 ### D1. Certify a Gatenet-based Pose Estimator for a straight line ODD in an indoor Env
 <img src="figures/train_data_new.gif" width="50%">
