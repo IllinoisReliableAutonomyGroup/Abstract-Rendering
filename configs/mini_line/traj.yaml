@@ -1,0 +1,13 @@
+start_pose: [-1.5, -1.5, -0.3, -1.57, 0.0, 0.0]
+gate_poses:
+  - [-1.5, -2.0, -0.2, -1.57, 0.0, 0.0]
+  - [-1.5, -2.5, -0.1, -1.57, 0.0, 0.0]
+  - [-1.5, -3.0, 0.0, -1.57, 0.0, 0.0]
+end_pose: [-1.5, -2.25, -0.2, -1.57, 0.0, 0.0]
+num_waypoints: 3
+gate_radius: 0.5
+base_radius: 0.1
+expand_radius: 0.1
+save_samples: true
+N_samples: 10
+case_name: "mini_line"
