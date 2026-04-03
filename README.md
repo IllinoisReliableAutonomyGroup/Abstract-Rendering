@@ -2,7 +2,9 @@
 
 ### Authors: Chenxi Ji\* , Yangge Li\* , Xiangru Zhong\* , Huan Zhang, Sayan Mitra
 
-### Updated: Chenxi Ji, chenxij2@illinois.edu, 01/30/2026
+### Maintainer: Jai Anchalia, Doug Belgorod
+
+<!-- ### Updated: Chenxi Ji, chenxij2@illinois.edu, 04/01/2026 -->
 This repository provides a user-friendly implementation of **Abstract-Rendering**, which computes the set of images that can be rendered from a set of camera poses under a 3D Gaussian Scene, along with downstream applications such as classification, pose estimation, and object detection.
 
 You can find more resources here:  
@@ -18,15 +20,59 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 
-## Demos
+## Demos 
+For certification results: green indicates success, red indicates failure, and $\epsilon$ denotes the user-defined error tolerance (specific to pose estimation tasks).
 
-| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+### D1. `IRL-four_straight_gate` — Certify a Gatenet-based Pose Estimator for a straight line ODD in an indoor Env
+<img src="figures/train_data_new.gif" width="50%">
+
+| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
 |:---:|:---:|:---:|
-| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) |
+| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
 
+### D2. `boeing_737` — Certify a Gatenet-based Pose Estimator for a cuboid ODD in a single airplane case
+<img src="figures/cuboidal.gif" width="50%">
+
+<!-- | ε = 20 cm | ε = 10 cm | 
+|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) |
+
+| ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|
+![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) | -->
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) |![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+
+
+<!-- | Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+|:---:|:---:|:---:|
+| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) | -->
 ---
 
-## Setup
+### D3. `boeing_737` — Certify a Gatenet-based Pose Estimator for an orbiting region in a single airplane case
+<img src="figures/orbital.gif" width="50%">
+
+<!-- | ε = 20 cm | ε = 10 cm |
+|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |
+
+| ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|
+| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) | -->
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+
+
+### D4. `boeing_737` — Certify a Resnet18-based Classifier for an orbiting region in a single airplane case
+<img src="figures/classification_airplane.png" width="50%">
+
+
+<details>
+<summary><span style="font-size: 20px; font-weight: bold;">Setup</span></summary>
 
 ### 0. (Optional) Install Nerfstudio
 
@@ -64,7 +110,7 @@ cd ~/Abstract-Rendering
 mkdir -p nerfstudio/outputs
 ```
 
-After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `IRL-four_straight_gate`):
+After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `train_data_new`):
 
 ```bash
 export case_name=mini_line
@@ -88,10 +134,10 @@ nerfstudio/outputs/
                 └── step-000XXXXXX.ckpt
 ```
 
-For example, the U-turn scene used in this repository sits at:
+For example, the mini-line scene used in this repository sits at:
 
 ```
-nerfstudio/outputs/IRL-four_straight_gate/splatfacto/2025-05-09_151825/
+nerfstudio/outputs/mini-line/splatfacto/2025-05-09_151825/
 ```
 
 Below is a visualization of scene *circle*.
@@ -127,7 +173,10 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
   ```
   and you can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
 
-## Examples
+
+</details>
+
+## Running Abstract Rendering and Visualizing Certification Results
 
 **Note**: The default GPU memory is 16GB. If you machine has less, please reduce the value of `gs_batch` in `config.yaml`.
 
@@ -166,7 +215,7 @@ The visualization of abstract image would be like
 where the top-left subfigure shows sample concrete image from the pose cell; the bottom-left/right subfigure shows lower/upper bound abstract images; the top-right subfigure shows per-pixel difference between bounds as a heatmap.
 
 
-### Train Gatenet
+<!-- ### Train Gatenet
 ```bash
 cd ~/Abstract-Rendering
 export case_name=mini_line
@@ -192,11 +241,11 @@ The visualization of Gatenet Verification is like:
 ![](figures/result_circle.png)
 
 where green indicates certified regions; red denotes potential
-violations; blue indicates gates.
+violations; blue indicates gates. -->
 
 ---
 
-### Visualize Certification in the Nerfstudio Viewer
+### Certification Downstream NN and Visualize Result in the Nerfstudio Viewer
 
 ```bash
 cd ~/Abstract-Rendering
@@ -217,13 +266,10 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 | `--no-cuboids` | Show the scene only, skip CROWN and cuboid overlay |
 | `--port 8081` | Change the viewer port if 8080 is already in use |
 
-**Results — Train Data New:**
-
-| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
-|:---:|:---:|:---:|
-| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
-
 ---
+
+<details>
+<summary><span style="font-size: 20px; font-weight: bold;">Boeing 787 Case</span></summary>
 
 ## Boeing 787 — Pose Estimation with LSR Certification
 
@@ -233,7 +279,7 @@ Two trajectory types are supported, both stored under `Outputs/AbstractImages/bo
 
 ```
 Outputs/AbstractImages/boeing_737/cuboid/
-├── cuboidal/    ← cuboidal trajectory (standard U-turn / approach path)
+├── cuboidal/    ← cuboidal trajectory (standard approach path)
 └── orbital/     ← circular orbital trajectory (all-angle views)
 ```
 
@@ -377,20 +423,17 @@ python3 scripts/visualize_abstract_viser.py \
 
 The four figures below show certification results at decreasing error thresholds — **ε = 20 cm, 10 cm, 2 cm, 0.2 cm**:
 
-| ε = 20 cm | ε = 10 cm |
-|:---:|:---:|
-| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |
-
-| ε = 2 cm | ε = 0.2 cm |
-|:---:|:---:|
-| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
 
 As the threshold tightens, more arc segments turn red — reflecting the growing difficulty of certifying fine-grained pose accuracy across all orbital viewpoints.
 
----
+</details>
+
 
 <details>
-<summary><b>Scripts</b></summary>
+<summary><span style="font-size: 20px; font-weight: bold;">Scripts</span></summary>
 
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
@@ -417,8 +460,8 @@ As the threshold tightens, more arc segments turn red — reflecting the growing
 `render_models.py`:
 - The rendering back‑end that both concrete and abstract pipelines rely on:
   - `TransferModel`: a wrapper that holds the current camera rotation and base translation (and, for abstract rendering, also the cylinder direction and radius describing the pose cell). Given either a concrete pose or abstract cylinder parameters, it uses `utils_transform.py` to build a full camera pose matrix and then calls the underlying renderer.
-  - `GsplatRGBOrigin`: the concrete renderer used by `render_gsplat.py`. It takes Nerfstudio’s Gaussian parameters (means, scales, opacities, colors), preprocesses them once, and for each pose and image tile projects the Gaussians into that tile and alpha‑blends their colors according to the Gaussian splatting algorithm to produce an RGB tile.
-  - `GsplatRGB`: the abstract renderer used by `abstract_gsplat.py`. It implements the same splatting idea as `GsplatRGBOrigin`, but is structured for abstract rendering: for a given pose and tile it (i) crops to only Gaussians that can affect that tile, (ii) splits them into batches controlled by `gs_batch` to fit in memory, and (iii) exposes per‑tile alpha and color tensors that encode each Gaussian’s contribution to each pixel. When `TransferModel(GsplatRGB, ...)` is evaluated under auto_LiRPA with a pose cell as input, these tensors become functions of the abstract input; `utils_alpha_blending.py` then performs interval alpha blending on their LiRPA bounds to obtain per‑pixel lower/upper color bounds over all poses in the perturbation set.
+  - `GsplatRGBOrigin`: the concrete renderer used by `render_gsplat.py`. It takes Nerfstudio's Gaussian parameters (means, scales, opacities, colors), preprocesses them once, and for each pose and image tile projects the Gaussians into that tile and alpha‑blends their colors according to the Gaussian splatting algorithm to produce an RGB tile.
+  - `GsplatRGB`: the abstract renderer used by `abstract_gsplat.py`. It implements the same splatting idea as `GsplatRGBOrigin`, but is structured for abstract rendering: for a given pose and tile it (i) crops to only Gaussians that can affect that tile, (ii) splits them into batches controlled by `gs_batch` to fit in memory, and (iii) exposes per‑tile alpha and color tensors that encode each Gaussian's contribution to each pixel. When `TransferModel(GsplatRGB, ...)` is evaluated under auto_LiRPA with a pose cell as input, these tensors become functions of the abstract input; `utils_alpha_blending.py` then performs interval alpha blending on their LiRPA bounds to obtain per‑pixel lower/upper color bounds over all poses in the perturbation set.
 
 `utils_transform.py`:
 - Handles all camera and scene coordinate conversions.
@@ -452,3 +495,4 @@ If you use this repository or the Abstract-Rendering toolkit in your work, pleas
   note      = {Poster},
   url       = {https://mitras.ece.illinois.edu/research/2025/AbstractRendering_Neurips2025.pdf}
 }
+```
