@@ -18,31 +18,11 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 
-## Results
+## Demos
 
-### Train Data New
-
-<video src="figures/train_data_new.mov" controls width="100%"></video>
-
-| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
+| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
 |:---:|:---:|:---:|
-| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
-
-### Boeing 787 — Cuboidal
-
-<video src="figures/cuboidal.mov" controls width="100%"></video>
-
-| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
-|:---:|:---:|:---:|:---:|
-| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) | ![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
-
-### Boeing 787 — Orbital
-
-<video src="figures/orbital.mov" controls width="100%"></video>
-
-| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
-|:---:|:---:|:---:|:---:|
-| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) | ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+| <video src="figures/train_data_new.mov" controls width="100%"></video> | <video src="figures/cuboidal.mov" controls width="100%"></video> | <video src="figures/orbital.mov" controls width="100%"></video> |
 
 ---
 
@@ -237,6 +217,12 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 | `--no-cuboids` | Show the scene only, skip CROWN and cuboid overlay |
 | `--port 8081` | Change the viewer port if 8080 is already in use |
 
+**Results — Train Data New:**
+
+| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
+|:---:|:---:|:---:|
+| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
+
 ---
 
 ## Boeing 787 — Pose Estimation with LSR Certification
@@ -369,6 +355,12 @@ Open `http://localhost:8080`. Green boxes = certified within threshold; red = vi
 | `--no-cuboids` | Show scene only, skip certification overlay |
 | `--port 8081` | Change viewer port |
 
+**Results — Boeing 787 Cuboidal:**
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) | ![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+
 ---
 
 ### 6. Visualize — Orbital (2D Certification Plot)
@@ -399,7 +391,9 @@ As the threshold tightens, more arc segments turn red — reflecting the growing
 
 ---
 
-## Scripts
+<details>
+<summary><b>Scripts</b></summary>
+
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
 - Reads `configs/${case_name}/config.yaml` for parameters set by the user and `configs/${case_name}/traj.json` for the pose information.
@@ -443,6 +437,8 @@ As the threshold tightens, more arc segments turn red — reflecting the growing
   - `traj.yaml` / `traj.json`: trajectory configuration and generated waypoint/pose file.
   - Optional downstream configs such as `gatenet.yml` and `vis_absimg.yaml`.
 - When creating a new case, you should create a new folder under `configs/` (for example `configs/my_case/`) and add a new `config.yaml` and trajectory files there, rather than modifying the existing case folders.
+
+</details>
 
 ## Citation
 
