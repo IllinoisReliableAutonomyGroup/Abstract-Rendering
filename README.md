@@ -64,7 +64,7 @@ cd ~/Abstract-Rendering
 mkdir -p nerfstudio/outputs
 ```
 
-After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `train_data_new`):
+After downloading, unzip the scene archive from your Downloads folder and move it into place. Set `case_name` to match the scene you downloaded (e.g. `IRL-four_straight_gate`):
 
 ```bash
 export case_name=mini_line
@@ -91,7 +91,7 @@ nerfstudio/outputs/
 For example, the U-turn scene used in this repository sits at:
 
 ```
-nerfstudio/outputs/train_data_new/splatfacto/2025-05-09_151825/
+nerfstudio/outputs/IRL-four_straight_gate/splatfacto/2025-05-09_151825/
 ```
 
 Below is a visualization of scene *circle*.
@@ -200,7 +200,7 @@ violations; blue indicates gates.
 
 ```bash
 cd ~/Abstract-Rendering
-export case_name=train_data_new
+export case_name=IRL-four_straight_gate
 python3 scripts/visualize_abstract_viser.py \
     --config configs/${case_name}/train_certify_config.yml \
     --option ns \
@@ -229,19 +229,19 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 
 This section covers the full pipeline for the **Boeing 787 Nerfstudio** scene using **Linear Set Representation (LSR)** — a tighter certification method that composes CROWN's per-pixel affine bounds with the abstract renderer's pixel-level affine LSR to produce certified affine pose bounds as a function of the original cuboid perturbation.
 
-Two trajectory types are supported, both stored under `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/`:
+Two trajectory types are supported, both stored under `Outputs/AbstractImages/boeing_737/cuboid/`:
 
 ```
-Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
+Outputs/AbstractImages/boeing_737/cuboid/
 ├── cuboidal/    ← cuboidal trajectory (standard U-turn / approach path)
 └── orbital/     ← circular orbital trajectory (all-angle views)
 ```
 
 > **Important:** Both subdirectories are populated by running the same `abstract_gsplat_pose_estimation.py` script with different trajectory files. The `orbital/` folder is **not** created automatically — after running abstract rendering with the orbital trajectory, manually create the subfolder and move the output `.pt` files there:
 > ```bash
-> mkdir -p Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital
-> mv Outputs/AbstractImages/boeing787_nerfstudio/cuboid/abstract_*.pt \
->    Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital/
+> mkdir -p Outputs/AbstractImages/boeing_737/cuboid/orbital
+> mv Outputs/AbstractImages/boeing_737/cuboid/abstract_*.pt \
+>    Outputs/AbstractImages/boeing_737/cuboid/orbital/
 > ```
 
 ---
@@ -253,8 +253,8 @@ Outputs/AbstractImages/boeing787_nerfstudio/cuboid/
 
 Trajectory generation scripts are not included in this repository. Generate the trajectory JSON files using your own tools and place them at:
 
-- **Cuboidal:** `configs/boeing787_nerfstudio/traj.json`
-- **Orbital:** `configs/boeing787_nerfstudio/traj_orbital.json`
+- **Cuboidal:** `configs/boeing_737/traj.json`
+- **Orbital:** `configs/boeing_737/traj_orbital.json`
 
 Each entry in the JSON must include `pose`, `pert_type: "cuboid"`, `cuboidal_halflen`, `lower_rel`, `upper_rel`, and `gate` fields. For the orbital case, ensure `cuboidal_halflen` is non-zero in both dimensions (lateral and vertical) — a zero halflen will produce invalid LSR matrices.
 
@@ -267,12 +267,12 @@ Abstract rendering for the boeing case uses `abstract_gsplat_pose_estimation.py`
 **Cuboidal:**
 ```bash
 cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
+export case_name=boeing_737
 python3 scripts/abstract_gsplat_pose_estimation.py \
     --config configs/${case_name}/config.yaml \
     --odd configs/${case_name}/traj.json
 ```
-Output goes to: `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/`
+Output goes to: `Outputs/AbstractImages/boeing_737/cuboid/`
 
 **Orbital** (run with the orbital trajectory, then move output manually):
 ```bash
@@ -280,20 +280,20 @@ python3 scripts/abstract_gsplat_pose_estimation.py \
     --config configs/${case_name}/config.yaml \
     --odd configs/${case_name}/traj_orbital.json
 
-mkdir -p Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital
-mv Outputs/AbstractImages/boeing787_nerfstudio/cuboid/abstract_*.pt \
-   Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital/
+mkdir -p Outputs/AbstractImages/boeing_737/cuboid/orbital
+mv Outputs/AbstractImages/boeing_737/cuboid/abstract_*.pt \
+   Outputs/AbstractImages/boeing_737/cuboid/orbital/
 ```
 
 ---
 
 ### 3. Configure `train_certify_config.yml`
 
-Edit `configs/boeing787_nerfstudio/train_certify_config.yml`:
+Edit `configs/boeing_737/train_certify_config.yml`:
 
 | Parameter | Cuboidal | Orbital |
 |---|---|---|
-| `abstract_folder` | `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/cuboidal` | `Outputs/AbstractImages/boeing787_nerfstudio/cuboid/orbital` |
+| `abstract_folder` | `Outputs/AbstractImages/boeing_737/cuboid/cuboidal` | `Outputs/AbstractImages/boeing_737/cuboid/orbital` |
 | `num_epochs` | e.g. `80` | e.g. `80` |
 | `use_lsr` | `true` | `true` |
 | `lambda_concrete` | `0.0` | `0.0` |
@@ -303,7 +303,7 @@ Edit `configs/boeing787_nerfstudio/train_certify_config.yml`:
 To **resume from a pretrained checkpoint** or run **certification only** (no training), set:
 ```yaml
 num_epochs: 0
-pretrained_checkpoint: "weights/gatenet/boeing787_nerfstudio/<run_datetime>/final_model.pth"
+pretrained_checkpoint: "weights/gatenet/boeing_737/<run_datetime>/final_model.pth"
 ```
 The script will automatically reuse the checkpoint's directory and resume any partial certification from where it left off.
 
@@ -313,7 +313,7 @@ The script will automatically reuse the checkpoint's directory and resume any pa
 
 ```bash
 cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
+export case_name=boeing_737
 python3 scripts/gatenet_train_certify.py \
     --config configs/${case_name}/train_certify_config.yml
 ```
@@ -321,7 +321,7 @@ python3 scripts/gatenet_train_certify.py \
 This single script:
 1. Trains GateNet using the CROWN interval-tightness loss on abstract images
 2. Runs LSR certification over all partitions, composing CROWN's per-pixel A matrices with the pixel-level LSR from the abstract renderer
-3. Saves `lsr_certification.pt` (affine pose bounds per partition) under `weights/gatenet/boeing787_nerfstudio/<run_datetime>/`
+3. Saves `lsr_certification.pt` (affine pose bounds per partition) under `weights/gatenet/boeing_737/<run_datetime>/`
 
 Certification checkpoints are saved every 50 partitions — if the process is killed (GPU OOM), re-running the command resumes automatically.
 
@@ -333,12 +333,12 @@ Certification checkpoints are saved every 50 partitions — if the process is ki
 
 ```bash
 cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
+export case_name=boeing_737
 python3 scripts/visualize_abstract_viser.py \
     --config configs/${case_name}/train_certify_config.yml \
     --option ns \
     --data ../Downloads/view_scene_mini/AbstractRenderingDataCollection/boeing787_sampled/boeing787_nerfstudio \
-    --lsr weights/gatenet/boeing787_nerfstudio/<run_datetime>/lsr_certification.pt \
+    --lsr weights/gatenet/boeing_737/<run_datetime>/lsr_certification.pt \
     --threshold 0.01
 ```
 
@@ -367,10 +367,10 @@ For the orbital case a top-down 2D view is more informative than a 3D cuboid ove
 
 ```bash
 cd ~/Abstract-Rendering
-export case_name=boeing787_nerfstudio
+export case_name=boeing_737
 python3 scripts/visualize_abstract_viser.py \
     --config configs/${case_name}/train_certify_config.yml \
-    --lsr weights/gatenet/boeing787_nerfstudio/<run_datetime>/lsr_certification.pt \
+    --lsr weights/gatenet/boeing_737/<run_datetime>/lsr_certification.pt \
     --threshold 0.01 \
     --plot2d figures/orbital_certification.png
 ```
