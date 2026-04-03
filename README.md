@@ -2,7 +2,9 @@
 
 ### Authors: Chenxi Ji\* , Yangge Li\* , Xiangru Zhong\* , Huan Zhang, Sayan Mitra
 
-### Updated: Chenxi Ji, chenxij2@illinois.edu, 01/30/2026
+### Maintainer: Jai Anchalia, Doug Belgorod
+
+<!-- ### Updated: Chenxi Ji, chenxij2@illinois.edu, 04/01/2026 -->
 This repository provides a user-friendly implementation of **Abstract-Rendering**, which computes the set of images that can be rendered from a set of camera poses under a 3D Gaussian Scene, along with downstream applications such as classification, pose estimation, and object detection.
 
 You can find more resources here:  
@@ -18,15 +20,49 @@ Follow the steps below to set up the environment, gather scene data, and run the
 
 ---
 
-## Demos
+## Demos 
+Green for success, Red for fail, $\epsilon$ for user-specific error tolerance.
 
-| Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+### D1. Certify a Gatenet-based Pose Estimator for a straight line ODD in an indoor Env
+![](figures/train_data_new.gif)
+
+| ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
 |:---:|:---:|:---:|
-| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) |
+| ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
 
+### D2. Certify a Gatenet-based Pose Estimator for a cuboid ODD in a single airplane case
+![](figures/cuboidal.gif)
+
+| ε = 20 cm | ε = 10 cm | 
+|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) |
+
+| ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|
+![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+
+<!-- | Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
+|:---:|:---:|:---:|
+|  | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) | -->
 ---
 
-## Setup
+### D3. Certify a Gatenet-based Pose Estimator for a orbiting region in a single airplane case
+![](figures/orbital.gif)
+
+| ε = 20 cm | ε = 10 cm |
+|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |
+
+| ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|
+| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+
+### D4. Certify a Resnet18-based Classifier for a orbiting region in a single airplane case
+![](figures/classification_airplane.png)
+
+
+<details>
+<summary><span style="font-size: 20px; font-weight: bold;">Setup</span></summary>
 
 ### 0. (Optional) Install Nerfstudio
 
@@ -88,10 +124,10 @@ nerfstudio/outputs/
                 └── step-000XXXXXX.ckpt
 ```
 
-For example, the U-turn scene used in this repository sits at:
+For example, the mini-line scene used in this repository sits at:
 
 ```
-nerfstudio/outputs/train_data_new/splatfacto/2025-05-09_151825/
+nerfstudio/outputs/mini-line/splatfacto/2025-05-09_151825/
 ```
 
 Below is a visualization of scene *circle*.
@@ -127,7 +163,10 @@ This repository also includes a Dockerfile that sets up a GPU-enabled environmen
   ```
   and you can follow the commands in the *Examples* section below exactly as written to run the rendering, abstract rendering, and downstream verification scripts from inside the container.
 
-## Examples
+
+</details>
+
+## Running Abstract Rendering and Visualizing Certification Results
 
 **Note**: The default GPU memory is 16GB. If you machine has less, please reduce the value of `gs_batch` in `config.yaml`.
 
@@ -166,7 +205,7 @@ The visualization of abstract image would be like
 where the top-left subfigure shows sample concrete image from the pose cell; the bottom-left/right subfigure shows lower/upper bound abstract images; the top-right subfigure shows per-pixel difference between bounds as a heatmap.
 
 
-### Train Gatenet
+<!-- ### Train Gatenet
 ```bash
 cd ~/Abstract-Rendering
 export case_name=mini_line
@@ -192,11 +231,11 @@ The visualization of Gatenet Verification is like:
 ![](figures/result_circle.png)
 
 where green indicates certified regions; red denotes potential
-violations; blue indicates gates.
+violations; blue indicates gates. -->
 
 ---
 
-### Visualize Certification in the Nerfstudio Viewer
+### Certification Downstream NN and Visualize Result in the Nerfstudio Viewer
 
 ```bash
 cd ~/Abstract-Rendering
@@ -222,8 +261,10 @@ Open `http://localhost:8080` in your browser. **Green** = certified, **red** = v
 | ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
 |:---:|:---:|:---:|
 | ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
-
 ---
+
+<details>
+<summary><span style="font-size: 20px; font-weight: bold;">Boeing787 Case</span></summary>
 
 ## Boeing 787 — Pose Estimation with LSR Certification
 
@@ -385,12 +426,14 @@ The four figures below show certification results at decreasing error thresholds
 |:---:|:---:|
 | ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
 
+
 As the threshold tightens, more arc segments turn red — reflecting the growing difficulty of certifying fine-grained pose accuracy across all orbital viewpoints.
 
----
+</details>
+
 
 <details>
-<summary><b>Scripts</b></summary>
+<summary><span style="font-size: 20px; font-weight: bold;">Scripts</span></summary>
 
 `render_gsplat.py`:
 - Concrete renderer: given a trained Nerfstudio 3D Gaussian scene and a list of poses, it produces standard RGB images along the trajectory.
