@@ -24,41 +24,51 @@ Follow the steps below to set up the environment, gather scene data, and run the
 Green for success, Red for fail, $\epsilon$ for user-specific error tolerance.
 
 ### D1. Certify a Gatenet-based Pose Estimator for a straight line ODD in an indoor Env
-![](figures/train_data_new.gif)
+<img src="figures/train_data_new.gif" width="50%">
 
 | ε = 0.05 m | ε = 0.10 m | ε = 0.20 m |
 |:---:|:---:|:---:|
 | ![tdn-0.05](figures/tdn-0.05.png) | ![tdn-0.1](figures/tdn-0.1.png) | ![tdn-0.2](figures/tdn-0.2.png) |
 
 ### D2. Certify a Gatenet-based Pose Estimator for a cuboid ODD in a single airplane case
-![](figures/cuboidal.gif)
+<img src="figures/cuboidal.gif" width="50%">
 
-| ε = 20 cm | ε = 10 cm | 
+<!-- | ε = 20 cm | ε = 10 cm | 
 |:---:|:---:|
 | ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) |
 
 | ε = 2 cm | ε = 0.2 cm |
 |:---:|:---:|
-![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) | -->
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![c20](figures/cuboidal-20.png) | ![c10](figures/cuboidal-10.png) |![c2](figures/cuboidal-2.png) | ![c0.2](figures/cuboidal-0.2.png) |
+
 
 <!-- | Train Data New | Boeing 787 — Cuboidal | Boeing 787 — Orbital |
 |:---:|:---:|:---:|
-|  | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) | -->
+| ![](figures/train_data_new.gif) | ![](figures/cuboidal.gif) | ![](figures/orbital.gif) | -->
 ---
 
 ### D3. Certify a Gatenet-based Pose Estimator for a orbiting region in a single airplane case
-![](figures/orbital.gif)
+<img src="figures/orbital.gif" width="50%">
 
-| ε = 20 cm | ε = 10 cm |
+<!-- | ε = 20 cm | ε = 10 cm |
 |:---:|:---:|
 | ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |
 
 | ε = 2 cm | ε = 0.2 cm |
 |:---:|:---:|
-| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+| ![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) | -->
+
+| ε = 20 cm | ε = 10 cm | ε = 2 cm | ε = 0.2 cm |
+|:---:|:---:|:---:|:---:|
+| ![orbital1](figures/orbital_certification1.png) | ![orbital2](figures/orbital_certification2.png) |![orbital3](figures/orbital_certification3.png) | ![orbital4](figures/orbital_certification4.png) |
+
 
 ### D4. Certify a Resnet18-based Classifier for a orbiting region in a single airplane case
-![](figures/classification_airplane.png)
+<img src="figures/classification_airplane.png" width="50%">
 
 
 <details>
