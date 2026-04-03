@@ -1,0 +1,51 @@
+# ============================================================================
+# Paths
+# ============================================================================
+concrete_samples_json: "configs/IRL-four_straight_gate/samples.json"
+concrete_image_root: "Outputs/RenderedImages/IRL-four_straight_gate/cuboid"
+abstract_folder: "Outputs/AbstractImages/IRL-four_straight_gate/cuboid"
+checkpoint_dir: "weights/gatenet/IRL-four_straight_gate"
+pretrained_checkpoint: null  # or "path/to/checkpoint.pth"
+run_datetime: "20260226_105336"
+
+# ============================================================================
+# Model Config
+# ============================================================================
+image_width: 32
+image_height: 32
+batch_norm_decay: 0.99
+batch_norm_epsilon: 0.001
+
+# ============================================================================
+# Training Config
+# ============================================================================
+num_epochs: 65
+batch_size_concrete: 18
+batch_size_abstract: 15
+num_workers: 4
+
+# ============================================================================
+# Loss Weights
+# ============================================================================
+lambda_concrete: 0.8
+lambda_abstract: 0.2
+tolerance: 0.2
+
+# ============================================================================
+# Optimizer Config
+# ============================================================================
+learning_rate: 0.0005
+weight_decay: 0.00001
+
+# ============================================================================
+# CROWN Config
+# ============================================================================
+bound_method: "backward"  # Options: 'backward', 'forward', 'crown-ibp', 'ibp'
+
+# ============================================================================
+# Checkpointing
+# ============================================================================
+save_every: 5  # Save checkpoint every N epochs
+
+use_reinforce: false  
+reinforce_noise_std: 0.1
